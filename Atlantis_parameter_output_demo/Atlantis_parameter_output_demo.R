@@ -41,7 +41,7 @@ for(mm in 1:n_model){
       for(sim in 1:nsim){
         ATL_output[mm, ss, ll, sim,,] = 
           
-          invent_cor_pars(seed = sim, n_param, n_projection_y,     # Dimensions, random seed
+          invent_cor_pars(seed = sim+sim*ll, n_param, n_projection_y,     # Dimensions, random seed
                           param_names=c("M","K","R"),              # Parameter labels (natural mortality rate, somatic growth, mean recruitment strength)
                           param_dir = c(1,-1,-1),                  # Direction of climate impact (increase, decrease, decrease)
                           param_start = c(0.2, 0.3, 1),            # Value at start of projection
