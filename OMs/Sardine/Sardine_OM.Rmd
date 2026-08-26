@@ -65,8 +65,7 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
 )
-knitr::opts_chunk$set(dpi=85, fig.width=7.5, fig.height = 5)
-
+knitr::opts_chunk$set(dpi=85, fig.width=5.5, fig.height = 4.1)
 
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 
@@ -98,7 +97,7 @@ plotatab2 <- function(filey,sheet,head=T){
 
 # Foreword
 
-This operating model aims to closely mimic a [recent stock assessment for South African Sardine by de Moor 2025](https://science.uct.ac.za/maram/2025-workshop) for the purposes of testing the potential robustness of management options to projected climate changes originating from an Ecoystem Model (Ortega et al. XXX). These analyses are exploratory and didactic and are not intended to inform management decision making at this stage. All data used in the construction of these operating models are publicly available from sources that are cited. 
+This operating model is for conducting are exploratory, didactic analyses and is not intended to inform management decision making at this stage. All data used in the construction of these operating models are publicly available from sources that are cited. 
 
 <br>
 <hr>
@@ -106,48 +105,174 @@ This operating model aims to closely mimic a [recent stock assessment for South 
 
 # Introduction
 
-## Stock Assessment
+This operating model aims to closely mimic a [recent stock assessment for South African Sardine by de Moor (2025)](https://science.uct.ac.za/maram/2025-workshop) for the purposes of testing the robustness of management procedures to projected climate changes originating from an Ecoystem Model (Ortega et al. XXX). 
 
-The assessment includes the revised hypothesis for stock structure and includes a West and a South stock ([Assessment Document BG4, de Moor 2025](https://science.uct.ac.za/sites/default/files/media/documents/science_uct_ac_za/2066/iws-2025-sardine-bg4.pdf)).
+The assessment includes a recently revised hypothesis for sardine stock structure and includes West and South stock components with varying somatic growth ([Assessment Document BG4, de Moor 2025](https://science.uct.ac.za/sites/default/files/media/documents/science_uct_ac_za/2066/iws-2025-sardine-bg4.pdf)). 
 
-This document is intended to guide prospective users on how to:
+The focus of this operating model is capturing the overall stock dynamics in terms of resilience, magnitude and natural variability for the purpose of evaluating under projections, various management porcedures (MP) that set annual advice. As such the focus not capturing the detailed historical spatial and seasonal dynamics necessary to interpret historical data correctly (a primary challenge for the assessment) but rather to use the assessment estimates for evaluating MPs. For this reason the operating model is spatially aggregated and captures the stock-wide dynamics informed by the recent stock assessment. 
 
-* work with mahi operating models
-* design and test management procedures (MPs)
-* summarize MP performance 
-
-
-##
-
+<br>
+<hr>
 
 # Methods
 
 ## OpenMSE 2.0
 
-OpenMSE operating models were configured to match historical catches and the estimates of biomass and recruitment arising from the [stock assessment](https://science.uct.ac.za/sites/default/files/media/documents/science_uct_ac_za/2066/iws-2025-sardine-bg4.pdf)
+OpenMSE operating models were configured to match the aggregate age-structured dynamics of the [stock assessment](https://science.uct.ac.za/sites/default/files/media/documents/science_uct_ac_za/2066/iws-2025-sardine-bg4.pdf) closely matching the estimates of harvest rate, recruitment and biomass. 
 
-<br>
-<hr>
+## OM Initialization 
+
+```{r, echo=TRUE, eval=TRUE}
+library(openMSE)
+library(readxl)
+packageVersion('MSEtool') # should be v4x
+
+# AI extracted estimates of recent assessed biomass, recruitment, harvest rate, selectivity, maturity and somatic growth
+est_yr =  as.data.frame(readxl::read_xlsx('Data/SA_Sardine_2025_estimates.xlsx', 'ByYear'))
+est_len = as.data.frame(readxl::read_xlsx('Data/SA_Sardine_2025_estimates.xlsx', 'ByLength'))
+est_age = as.data.frame(readxl::read_xlsx('Data/SA_Sardine_2025_estimates.xlsx', 'ByAge'))
+
+# Create blank operating model and fill details
+om = new('om') 
+om@Name = "South African Sardine"
+om@Longitude = 20
+om@Latitude  = -35
+om@Author = 'Tom Carruthers'
+om@Agency = 'Blue Matter'
+om@Email = 'tom@bluematterscience.com'
+om@Region = "South Africa"
+om@Sponsor = "The Ocean Foundation"
+om@Source = "https://climatetest.bluematterscience.com"
+
+# Basic Config
+Years = est_yr$Year           # historical year labels
+ny = length(Years)            # number of historical years
+om@nYear = ny                 # historical year
+om@pYear = 50                 # 50 projected years
+om@Interval = 1               # management updated every 1 year
+om@DataLag = 1                # data available from last year (not in-season management)
+om@nSim = 48                  # No. realisations of stock and fleet dynamics
+om@CurrentYear = max(Years)   # label for most recent historical year
+om@Years = Years(om)          # all year labels
+om@Seasons = 1                # Annual OM
+om@maxF = 3                   # maximum apical exploitation rate is 3.0 (harvest rate of 95%)
+om@Seed = 1                   # random seed for stochastic sampling
+om@Log[[1]] = paste("OM created:", Sys.Date()) 
+
+```
+
+## Stock and Fleet Initialization 
+
+```{r, echo=TRUE, eval=TRUE}
+stock = new('stock')
+stock@Name = 'South African Sardine'
+stock@CommonName = 'Sardine'
+stock@Species = 'Engraulis encrausicolus'
+
+fleet = new('fleet')
+fleet@Name = "All commercial fleets (inc directed sardine and round herring)"
+```
 
 
-## Parameters
+## Natural mortality rate 
 
-### Natural mortality rate 
+The operating model assumes the same natural mortality as the recent stock assessment (following the 2022 assessment of [de Moor (2022)](https://doi.org/10.25375/uct.22146602.v1)) that is 1.0 per year for juveniles (age 0) and 0.8 for mature fish (age 1+). 
 
-From 2022 Assessment [de Moor (2022)](https://doi.org/10.25375/uct.22146602.v1) assuming 1.0 for juvenile and 0.8 for mature fish. 
+```{r, echo=TRUE, eval=TRUE}
+stock@Ages = Ages(6, MinAge = 0)                                            # Age 6 is the last age class for calculations of age-based vectors
+stock@NaturalMortality = NaturalMortality(MeanAtAge = c(1.0, rep(0.8,6)))   
+plot(stock@Ages@Classes,stock@NaturalMortality@MeanAtAge, pch=19, lwd=2, xlab = "Age", ylim = c(0,1), ylab = "Inst. Nat. M. (per year)"); grid()
+```
 
-### Somatic Growth
+## Somatic Growth
 
 Combined South + West from 2025 assessment [de Moor 2025](https://science.uct.ac.za/sites/default/files/media/documents/science_uct_ac_za/2066/iws-2025-sardine-bg4.pdf).
 
-### Selectivity 
+```{r, echo=TRUE, eval=TRUE}
+Classes = 1:ceiling(max(est_age$Length)*1.3)   
+stock@Length = Length(MeanAtAge = c(est_age$Length,est_age$Length[6]),  # Need to add another asympotic length to make 7 age classes (first is age-0)
+                      Classes = 1:ceiling(max(est_age$Length)*1.3) )    # Length classes
+plot(0:6,stock@Length@MeanAtAge, lwd=2, type="l",xlab = "Age", ylab = "Length (cm)"); grid()
+```
+
+## Maturity
+
+The maturity ogive was specified according to the MSE operating model ogive identified by [de Moor (2025)](https://science.uct.ac.za/sites/default/files/media/documents/science_uct_ac_za/2066/iws-2025-sardine-bg5.pdf). This prescribes a logistic model with a length 50% maturity of 11.8811 cm with a rate of increase in maturity at length of 1.9311
+
+```{r, echo=TRUE, eval=TRUE}
+stock@Maturity = Maturity(MeanAtLength = 1/(1+exp(-(Classes - 11.88)/1.93)))
+plot(Classes,stock@Maturity@MeanAtLength, lwd=2, type="l",xlab = "Length (cm)", ylab = "Fraction Mature"); grid()
+```
+
+## Recruitment
+
+```{r, echo=TRUE, eval=TRUE}
+
+B = est_yr$B_west + est_yr$B_south # Biomass Mt (could be unitless, R0 and steepness h are the targets)
+R = est_yr$R_west + est_yr$R_south # Billions of fish
+
+BH<-function(par, B, R, mode='opt', plot = F, tplot = F, curyr = 2024, pmu = 0.6, pcv = 0.1){ # optimization function for Bev-Holt SR
+  h = 0.2 + 0.8 * (1 / (1 + exp(par[1]))); R0 = exp(par[2]);  BpR = max(B,na.rm=T) / R0       # logit between 0.2 and 1
+  Rpred<-((0.8 * R0 * h * B) / (0.2 * BpR * R0 * (1 - h) + (h - 0.2) * B))                    # predicted recruitment 
+  if(plot) {plot(B,R,pch=19); points(B, Rpred,col='red');                                     # plot fitted SR curve 
+            legend('topleft',legend=c(paste("h =",round(h,3)),paste("R0 =",round(R0,3))),text.col="red",bty="n")}
+  if(mode=='opt')return(-sum(dnorm(log(Rpred)-log(R),0,0.5,log=T), na.rm=T)-dnorm(pmu,h,pcv,log=T))  # add prior on h
+  if(mode != "opt") return(log(R / Rpred))                                                    # return log rec devs
+}
+
+opt = optim(par = c(0,log(max(R,na.rm=T)/2)), BH, # optimize for h and R0 from initial values of 0.6 and half the max R
+            B =  B, R = R, method = "L-BFGS-B",   # bounded optimization
+            lower = c(-4,log(10)),                # broad limits
+            upper = c(4,log(50)))                 # broad limits
 
 
-### Apical F
+RD = BH(opt$par, B, R, plot=T, mode = "devs") # recruitment deviations  
+R0 = exp(opt$par[2])                          # 'unfished' recruitment
+h = 0.2 + 0.8 * (1 / (1 + exp(opt$par[1])))   # steepness of the B-H S-R function
+AC = acf(RD[!is.na(RD)],1)$acf[2,1,1]         # lag-1 recruitment autocorrelation
+SD = sd(RD, na.rm=T)                          # lognormal recruitment process error ('sigma-R')          
 
-### Unfished Recruitment
 
-### Annual Recruitment
+DepGuess = (B[1]/mean(B,na.rm=T))                                           # depletion guess
+RecDevInit = matrix(DepGuess, nrow = om@nSim, ncol = stock@Ages@MaxAge+1)   # initial rec devs (year 1)
+RecDevHist = matrix(RD,nrow = om@nSim, ncol = ny, byrow = T)                # historical rec devs
+RecDevProj = matrix(NA,nrow = om@nSim, ncol = om@pYear)                     # projected rec devs
+nterminal = sum(is.na(RD))                                                  # No. terminal years in need of filling
+fyears = rev(rev(om@Years)[1:(nterminal + om@pYear)])                       # labels for years that need filling
+res = MSEtool::GenResiduals(SD, AC, fyears, om@nSim, TruncSD = 3)           # generated residuals with AC and SD
+RecDevHist[,(ny-nterminal+1):ny] = res[,1:nterminal]                        # populate terminal rec devs
+RecDevProj = res[, (nterminal+1):ncol(res)]                                 # populate projected rec devs
+
+stock@SRR = SRR(Pars=list(h=h), R0 = R0, AC = AC, RecDevInit = RecDevInit,  # build Stock Rec. Rel. slot
+                RecDevHist = RecDevHist, RecDevProj = RecDevProj)
+
+matplot(Years(om, Period = "P"), t(RecDevProj[1:4,]),lty=1,type="l",
+        xlab="Proj. Year",ylab ="Rec. Dev.", main="4 Simulations"); grid()
+legend('topleft',legend=c(paste("SD =",round(SD,2)),paste("Lag-1 AC =", round(AC,2))))
+
+```
+
+## Selectivity 
+
+Commercial fishery selectivity follows the length-vector of the most recent estimated year of the stock assessment.  
+
+
+
+
+## Apical F
+
+
+
+## Scale optimization
+
+Two components of the OM specification need to be adjusted to match estimated biomass, recruitment and harvest rate: unfished recruitment (scale), apical F mismatch. 
+
+To do this we initialize the OM, estimate harvest rate, biomass and recruitment and wrap this into a bivariate optimization for unfished recruitement and apical F modifiers. 
+
+
+
+
+
 
 
 # Results
@@ -166,6 +291,20 @@ The package is subject to ongoing testing and development. If you find a bug or 
 
 
 
+
+# In Development
+
+Outstanding tasks: 
+
+```{r ToDo, eval=T,echo=F}
+
+plotatab2('Tables/Various.xlsx','ToDo')
+
+```
+
+
+
+
 # Background information
 
 Project information, links and results are available from the Climate Test [project webpage](https://blue-matter.github.io/ClimateTest/)
@@ -174,12 +313,6 @@ Project information, links and results are available from the Climate Test [proj
 <hr>
 
 # Software
-The [Rapid Conditioning Model](https://openmse.com/tutorial-rcm/) was used to fit operating models to observed data. 
-
-
-<br>
-<hr>
-
 
 ## OpenMSE
 
@@ -198,6 +331,7 @@ The Ocean Foundation host the [Harvest Strategies website](https://harveststrate
 
 <br>
 <hr>
+
 
 # References
 
