@@ -76,6 +76,7 @@ getF = function(rel=1){X+rel}
 Tplus = function(){Y=Y+1;assign("Y",Y, envir = globalenv())}
 getT = function(rel=1){Y+rel}
 
+par(mai=c(0.9,0.9,0.2,0.05))
 
 plotatab2 <- function(filey,sheet,head=T){
   if(head){
@@ -167,7 +168,7 @@ om@Log[[1]] = paste("OM created:", Sys.Date())
 stock = new('stock')
 stock@Name = 'South African Sardine'
 stock@CommonName = 'Sardine'
-stock@Species = 'Engraulis encrausicolus'
+stock@Species = 'Sardinops sagax'
 
 fleet = new('fleet')
 fleet@Name = "All commercial fleets (inc directed sardine and round herring)"
@@ -180,13 +181,13 @@ The operating model assumes the same natural mortality as the recent stock asses
 
 ```{r, echo=TRUE, eval=TRUE}
 stock@Ages = Ages(6, MinAge = 0)                                            # Age 6 is the last age class for calculations of age-based vectors
-stock@NaturalMortality = NaturalMortality(MeanAtAge = c(1.0, rep(0.8,6)))   
+stock@NaturalMortality = NaturalMortality(MeanAtAge = c(0, 1.0, rep(0.8, 5)))   
 plot(stock@Ages@Classes,stock@NaturalMortality@MeanAtAge, pch=19, lwd=2, xlab = "Age", ylim = c(0,1), ylab = "Inst. Nat. M. (per year)"); grid()
 ```
 
 ## Somatic Growth
 
-Combined South + West from 2025 assessment [de Moor 2025](https://science.uct.ac.za/sites/default/files/media/documents/science_uct_ac_za/2066/iws-2025-sardine-bg4.pdf).
+The operating model assumes an length-at-age vector that is the unweighted mean of the South and West curves used by the 2025 assessment [de Moor 2025](https://science.uct.ac.za/sites/default/files/media/documents/science_uct_ac_za/2066/iws-2025-sardine-bg4.pdf).
 
 ```{r, echo=TRUE, eval=TRUE}
 Classes = 1:ceiling(max(est_age$Length)*1.3)   
@@ -195,16 +196,39 @@ stock@Length = Length(MeanAtAge = c(est_age$Length,est_age$Length[6]),  # Need t
 plot(0:6,stock@Length@MeanAtAge, lwd=2, type="l",xlab = "Age", ylab = "Length (cm)"); grid()
 ```
 
+## Weight-at-Length
+
+Assessment documentation does not provide a length-weight equation with parameters. For now I assumed the quadratic equation established by [Ndaula et al. (2013)](https://www.sciencedirect.com/science/article/abs/pii/S0165783613001586):
+
+log10(W) = -1.825 + 2.679 x log10(L) + 0.224 x log10(L)^2
+
+Note that the length-weight relationsip is largely inconsequential: both the length-weight relationship and unfished recruitment both control stock scale (catches and biomass) but numbers are not used in the model, only total catch and stock biomass. 
+
+```{r, echo=TRUE, eval=TRUE, fig.width= 7}
+LT = log10(stock@Length@MeanAtAge)
+WT = 10^(-1.825 + 2.679 * LT + 0.224 * LT^2) / 1000 # kg
+stock@Weight = Weight(MeanAtAge = WT)
+
+par(mfrow=c(1,2),mai=c(0.9,0.9,0.6,0.05))
+plot(0:6, WT, xlab="Age",ylab = "Weight (kg)",type="l", lwd=1.5)
+plot(10^LT, WT, type="l",lwd=1.5,xlab="Length (cm)",ylab = "Weight (kg)")
+
+```
+
 ## Maturity
 
-The maturity ogive was specified according to the MSE operating model ogive identified by [de Moor (2025)](https://science.uct.ac.za/sites/default/files/media/documents/science_uct_ac_za/2066/iws-2025-sardine-bg5.pdf). This prescribes a logistic model with a length 50% maturity of 11.8811 cm with a rate of increase in maturity at length of 1.9311
+The maturity ogive followed that specified by a preliminary MSE operating model of [de Moor (2025)](https://science.uct.ac.za/sites/default/files/media/documents/science_uct_ac_za/2066/iws-2025-sardine-bg5.pdf). This prescribes a logistic model with a length 50% maturity of 11.8811 cm with a rate of increase in maturity at length of 1.9311
 
 ```{r, echo=TRUE, eval=TRUE}
-stock@Maturity = Maturity(MeanAtLength = 1/(1+exp(-(Classes - 11.88)/1.93)))
+stock@Maturity = Maturity(MeanAtLength = 1/(1+exp(-(Classes - 11.88)/1.93)), Classes = Classes)
 plot(Classes,stock@Maturity@MeanAtLength, lwd=2, type="l",xlab = "Length (cm)", ylab = "Fraction Mature"); grid()
 ```
 
 ## Recruitment
+
+Annual recruitment estimates for the West and South stock components were summed to obtain overall stock recruitment. This was related to estimated biomass to derive two model parameters: unfished recruitment (R0, scale, carring capacity) and steepness (resilience). 
+
+This analysis should be derived from the estimates of spawning stock biomass (SSB) from the stock assessment but these are not provided in the publically available reports. 
 
 ```{r, echo=TRUE, eval=TRUE}
 
@@ -227,19 +251,20 @@ opt = optim(par = c(0,log(max(R,na.rm=T)/2)), BH, # optimize for h and R0 from i
 
 
 RD = BH(opt$par, B, R, plot=T, mode = "devs") # recruitment deviations  
-R0 = exp(opt$par[2])                          # 'unfished' recruitment
+R0 = exp(opt$par[2]) * 1E9                    # 'unfished' recruitment
 h = 0.2 + 0.8 * (1 / (1 + exp(opt$par[1])))   # steepness of the B-H S-R function
 AC = acf(RD[!is.na(RD)],1)$acf[2,1,1]         # lag-1 recruitment autocorrelation
 SD = sd(RD, na.rm=T)                          # lognormal recruitment process error ('sigma-R')          
 
 
-DepGuess = (B[1]/mean(B,na.rm=T))                                           # depletion guess
-RecDevInit = matrix(DepGuess, nrow = om@nSim, ncol = stock@Ages@MaxAge+1)   # initial rec devs (year 1)
-RecDevHist = matrix(RD,nrow = om@nSim, ncol = ny, byrow = T)                # historical rec devs
+DepGuess = (B[1]/quantile(B,0.5,na.rm=T))                                   # depletion guess
+RecDevInit = matrix(DepGuess, nrow = om@nSim, ncol = stock@Ages@MaxAge)     # initial rec devs go into year 1 of RecDevHist
+RecDevHist = matrix(exp(RD),nrow = om@nSim, ncol = ny, byrow = T)           # historical rec devs
 RecDevProj = matrix(NA,nrow = om@nSim, ncol = om@pYear)                     # projected rec devs
 nterminal = sum(is.na(RD))                                                  # No. terminal years in need of filling
 fyears = rev(rev(om@Years)[1:(nterminal + om@pYear)])                       # labels for years that need filling
-res = MSEtool::GenResiduals(SD, AC, fyears, om@nSim, TruncSD = 3)           # generated residuals with AC and SD
+res = MSEtool::GenResiduals(SD, rep(AC,om@nSim), fyears, om@nSim, TruncSD = 3, 
+                            LastError = exp(RecDevHist[,ny-nterminal]))     # generated residuals with AC and SD
 RecDevHist[,(ny-nterminal+1):ny] = res[,1:nterminal]                        # populate terminal rec devs
 RecDevProj = res[, (nterminal+1):ncol(res)]                                 # populate projected rec devs
 
@@ -252,14 +277,62 @@ legend('topleft',legend=c(paste("SD =",round(SD,2)),paste("Lag-1 AC =", round(AC
 
 ```
 
+The estimated stock biomass and estimated recruitment cannot be considered as independent (biomass) and dependent (recruitment) variables because biomass itself is a product of recruitment, and this is particularly the case for short-lived species such as sardine. The inter-dependency of these variables generally leads to an overestimate of stock resilience because higher than average recruitment is required at low stock sizes (and vice versa) to drive changes in the biomass levels. 
+
+It is therefore remarkable how little recruitment compensation is estimated (even in this post-hoc fitting). In this case, a relatively informative prior on a steepness (a level of 0.6 which is moderate resilience) barely drags steepness estimates above a value of 0.3. Without this prior, the estimated steepness tends to its lowest possible value of 0.2 which is ecologically implausible (a stock without compensation has a very high probability of extinction). 
+
+This analysis should be revised and updated given SSB estimates from the assessment. 
+
+
 ## Selectivity 
 
-Commercial fishery selectivity follows the length-vector of the most recent estimated year of the stock assessment.  
+Commercial fishery selectivity follows the length-based-vector of the most recent estimated year of the stock assessment. 
 
+```{r, echo=TRUE, eval=TRUE}
 
+nl = length(Classes)                                        # No. length classes
+MeanAtLength = rep(0, nl)                                   # fill a vector with zero selectivity
+ind = match(est_len$Length, Classes)                        # get correct indexing for estimated selectivity
+MeanAtLength[ind] = est_len$Selectivity                     # map estimated selectivity
+MeanAtLength[max(ind):nl] = 1                               # fill upper range with 100% selectivity (asymptotic)
 
+fleet@Selectivity = Selectivity(MeanAtLength = MeanAtLength,
+                                Classes = Classes)
+
+plot(Classes,MeanAtLength, lwd=2, type="l",xlab = "Length (cm)", ylab = "Commercial Selectivity", main = "Estimated by Assessment in 2024"); grid()
+lines(Classes,stock@Maturity@MeanAtLength, lwd=1.5, lty=2,col='red'); 
+legend('topleft', legend = c("Selectivity", "Fraction Mature"),text.col = c("black","red"),bty='n')
+
+```
 
 ## Apical F
+
+The stock assessment reports provide a time-series estimate of harvest rate (U) for the combined West and South components. This is converted to an guess of apical F that will be later adjusted to match historical biomass estimates. 
+
+
+```{r, echo=TRUE, eval=TRUE}
+
+U = est_yr$U                                              # harvest rate times series (S and W combined)
+Adj_vuln = 0.5                                            # apical F and selectivity curve is 50% of the biomass available (U)
+F_guess = -log(1-U) / Adj_vuln                            # initial guess of F time series
+Eff = matrix(F_guess, nrow=om@nSim, ncol=ny, byrow = T, 
+             dimnames = list(1:om@nSim,Years(om,'h')))    # Effort matrix with correct year labels
+fleet@Effort = Effort(Effort = Eff)                       # Populate historical effort slot
+fleet@Catchability = Catchability(Efficiency = 1)         # Populate catchability slot, F = qE, hence F = E as specified
+
+```
+
+
+## Initial OM
+
+```{r, echo=TRUE, eval=TRUE}
+
+om@Stock = stock
+om@Fleet = fleet
+hist = Simulate(om)
+
+
+```
 
 
 
@@ -269,8 +342,86 @@ Two components of the OM specification need to be adjusted to match estimated bi
 
 To do this we initialize the OM, estimate harvest rate, biomass and recruitment and wrap this into a bivariate optimization for unfished recruitement and apical F modifiers. 
 
+```{r, echo=TRUE, eval=TRUE}
+
+ctrl = SimControl(DynamicUnfished = FALSE,
+                     RefLandings = FALSE,
+                     RefRemovals = FALSE,
+                     ConditionObs = FALSE,
+                     EstimateBeta = FALSE,
+                     GenerateData = FALSE,
+                     MSYRefs = FALSE,
+                     RefPoints = FALSE,
+                     MGT = FALSE,
+                     BLow = FALSE)
 
 
+Apply_pars = function(om, pars){
+  R0mult = exp(pars[1])
+  Emult = exp(-pars[1]) * exp(pars[2])                      # fried egg please!
+  om@Stock@SRR@R0 = om@Stock@SRR@R0 * R0mult
+  om@Fleet@Effort@Effort =  om@Fleet@Effort@Effort * Emult
+  om
+}
+
+
+doplot = function(om, B, R, Best, Rest, obj){
+  par(mfrow =c(1,2),mai=c(0.5,0.5,0.2,0.05))
+  ind = !is.na(R); yrs = Years(om, 'h')[ind]
+  matplot(yrs, cbind(R[ind],Rest[ind]),col=c("black","red"),lty=1,lwd=1.5,type = 'l');grid()
+  legend('topleft',legend=c("Assessment","OpenMSE"),text.col = c("black","red"), bty="n")
+  matplot(yrs,cbind(B[ind],Best[ind]),col=c("black","red"),lty=1,lwd=1.5,type = 'l');grid()
+  legend('topleft',legend=c(paste("R0 multiplier =",round(exp(pars[1]),3)),
+                            paste("Effort multiplier =",round(exp(pars[2]),3)),
+                            paste("Obj. F. =", round(obj,5))), bty="n")
+}  
+
+Int_Scale = function(pars, om, B, R, mode = 'opt', ctrl, plot=F){
+  om = Apply_pars(om, pars)
+  hist = Simulate(om, control = ctrl)
+  Best = hist@Biomass[1,1,] * 1E-9
+  Rest = hist@Number[[1]][1,1,,1] * 1E-9
+  if(mode == 'opt')  obj = sum(abs(log(Best)-log(B)),na.rm=T) + sum(abs(log(Rest)-log(R)),na.rm=T)
+  if(mode == 'optB')  obj = sum(abs(log(Best)-log(B)),na.rm=T)
+  if(plot) doplot(om, B, R, Best, Rest, obj)
+  if(grepl("opt", mode)){
+    return(obj)
+  }else{
+    pars
+  }
+} 
+
+opt = optim(c(0,0), Int_Scale, 
+      om = om, B = B, R = R, ctrl = ctrl, plot=T,
+      method = "L-BFGS-B", control = list(factr = 1E12),
+      lower = c(-2, -2), upper = c(2, 2))
+
+om2 = Apply_pars(om,opt$par)
+
+for(i in 1:2){
+  hist = Simulate(om2, control=control)
+  Best = hist@Biomass[1,1,] * 1E-9
+  Rest = hist@Number[[1]][1,1,,1] * 1E-9
+  doplot(om2, B, R, Best, Rest, obj = 0)
+  ratio = matrix(R/Rest,byrow=T,nrow=om@nSim,ncol=om@nYear)
+  ratio[is.na(ratio)] = 1
+  R0_adj = exp(log(ratio)*0.5)
+  om2@Stock@SRR@RecDevHist[] = om2@Stock@SRR@RecDevHist[] * R0_adj
+}
+
+opt = optim(c(0,0), Int_Scale, 
+            om = om2, B = B, R = R, ctrl = ctrl, mode = "optB", plot=T,
+            method = "L-BFGS-B", control = list(factr = 1E12),
+            lower = c(-2, -2), upper = c(2, 2))
+
+
+om3 = Apply_pars(om2,opt$par)
+hist = Simulate(om2, control=control)
+  Best = hist@Biomass[1,1,] * 1E-9
+  Rest = hist@Number[[1]][1,1,,1] * 1E-9
+  doplot(om2, B, R, Best, Rest, obj = 0)
+
+```
 
 
 
