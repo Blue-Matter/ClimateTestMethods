@@ -517,6 +517,8 @@ The Ocean Foundation host the [Harvest Strategies website](https://harveststrate
 
 [Carruthers, T.R., 2024b. Developing the Climate Test: Performance Metrics of Climate Robustness. Col. Vol. Sci. Pap. ICCAT. 81(2): 1-7](https://www.iccat.int/Documents/CVSP/CV081_2024/n_2/CV08102148.pdf)
 
+<br>
+<hr>
 
 # References
 
@@ -524,19 +526,8 @@ The Ocean Foundation host the [Harvest Strategies website](https://harveststrate
 
 Hordyk, A., Huynh, Q., Carruthers, T. 2025. OpenMSE: An open-source R package for Management strategy evaluation, available from: https://openmse.com
 
-
 <br>
 <hr>
-<br>
-<br>
-<br>
-<br>
-<br>
-<br>
-<br>
-<br>
-
-
 
 # Acknowledgements
 
@@ -552,4 +543,15 @@ Hordyk, A., Huynh, Q., Carruthers, T. 2025. OpenMSE: An open-source R package fo
 
 <span style="font-size: 1.25em; display: block; text-align: center;">The Ocean Foundation in partnership with [www.HarvestStrategies.org](https://harveststrategies.org/)</span>
 
+<br>
+
+<br>
+<hr>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
 <br>

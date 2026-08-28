@@ -1,0 +1,141 @@
+---
+title: "Supporting Documents and Methods for the Climate Test"
+subtitle: "Rating the Climate Readiness of Fishery Management Options"
+author: "Tom Carruthers <tom@bluematterscience.com>"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+    fig_caption: true
+  word_document:
+    toc: yes
+    fig_caption: true
+  rmarkdown::html_vignette:
+    number_sections: yes
+    toc: yes
+    fig_caption: true
+  rmarkdown::pdf_vignette:
+    number_sections: yes
+    toc: yes
+    fig_caption: true
+  pdf_document:
+    toc: yes
+    fig_caption: true
+---
+
+&nbsp;
+
+<style>
+  .col2 {
+    columns: 2 200px;         /* number of columns and width in pixels*/
+    -webkit-columns: 2 200px; /* chrome, safari */
+    -moz-columns: 2 200px;    /* firefox */
+  }
+  .col3 {
+    columns: 3 100px;
+    -webkit-columns: 3 100px;
+    -moz-columns: 3 100px;
+  }
+  .col4 {
+    columns: 4 100px;
+    -webkit-columns: 4 100px;
+    -moz-columns: 4 100px;
+  }
+  .hanging-indent {
+      text-indent: -1.5em; 
+      padding-left: 1.5em; 
+  }
+</style>
+
+<style type="text/css">
+
+body{ /* Normal  */
+   font-size: 12px;
+}
+td {  /* Table  */
+   font-size: 12px;
+}
+h1 { /* Header 1 */
+ font-size: 19px;
+ color: DarkBlue;
+}
+h2 { /* Header 2 */
+ font-size: 16px;
+ color: DarkBlue;
+}
+h3 { /* Header 3 */
+ font-size: 14px;
+ color: DarkBlue;
+}
+code.r{ /* Code block */
+  font-size: 12px;
+}
+pre { /* Code block */
+  font-size: 12px
+}
+</style>
+
+***
+
+<img src="img/mechCT.png" width = 910>
+
+***
+
+&nbsp;
+
+[<img src="img/BM.jpg" width="140">](https://www.bluematterscience.com/)
+[<img src="img/openMSE.JPG" width="150">](https://openmse.com/)
+[<img src="img/HS.png" width = "85">](https://harveststrategies.org/)
+
+***
+
+&nbsp;
+
+
+# Atlantis Models
+
+Placeholder
+
+***
+
+&nbsp;
+
+# Operating Models
+
+South Africa Sardine [operating model specification report](OMs/Sardine/Sardine_OM.html)
+
+***
+
+&nbsp;
+
+# Supporting Documents
+
+Placeholder
+
+***
+
+&nbsp;
+
+# Acknowledgements
+
+<br>
+
+<span style="font-size: 1.05em; display: block; text-align: center;">ClimateTest is funded by:
+
+<span style="font-size: 1.25em; display: block; text-align: center;">The Paul M. Angell Family Foundation</span> 
+<span style="font-size: 1.25em; display: block; text-align: center;">Oceankind</span>
+<span style="font-size: 1.25em; display: block; text-align: center;">The Pew Charitable Trusts</span>
+
+<span style="font-size: 1.05em; display: block; text-align: center;">and </span>
+
+<span style="font-size: 1.25em; display: block; text-align: center;">The Ocean Foundation in partnership with [www.HarvestStrategies.org](https://harveststrategies.org/)</span>
+
+<br>
+
+
+***
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
