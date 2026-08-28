@@ -7,7 +7,7 @@ output:
     number_sections: yes
     toc: true
     toc_float: true
-subtitle: Plausible hypothetical state of nature for the tailored climate test. 
+subtitle: A plausible hypothetical state of nature for investigating the tailored Climate Test. 
 vignette: >
   %\VignetteIndexEntry{Inverts}
   %\VignetteEngine{knitr::rmarkdown}
@@ -65,7 +65,7 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
 )
-knitr::opts_chunk$set(dpi=85, fig.width=5.5, fig.height = 4.1)
+knitr::opts_chunk$set(dpi=85, fig.width=5.5, fig.height = 4.1, message = F)
 
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 
@@ -342,7 +342,7 @@ Two components of the OM specification need to be adjusted to match estimated bi
 
 To do this we initialize the OM, estimate harvest rate, biomass and recruitment and wrap this into a bivariate optimization for unfished recruitement and apical F modifiers. 
 
-```{r, echo=TRUE, eval=TRUE}
+```{r, echo=TRUE, eval=TRUE, message = FALSE, fig.width = 7.5}
 
 ctrl = SimControl(DynamicUnfished = FALSE,
                      RefLandings = FALSE,
@@ -365,16 +365,24 @@ Apply_pars = function(om, pars){
 }
 
 
-doplot = function(om, B, R, Best, Rest, obj){
-  par(mfrow =c(1,2),mai=c(0.5,0.5,0.2,0.05))
+doplot = function(om, B, R, Best, Rest, pars, obj){
+  par(mfrow =c(1,2),mai=c(0.5,0.9,0.2,0.05))
   ind = !is.na(R); yrs = Years(om, 'h')[ind]
-  matplot(yrs, cbind(R[ind],Rest[ind]),col=c("black","red"),lty=1,lwd=1.5,type = 'l');grid()
+  matplot(yrs, cbind(R[ind],Rest[ind]), ylab = "Recruitment (B)", col=c("black","red"),lty=1,lwd=1.5,type = 'l');grid()
   legend('topleft',legend=c("Assessment","OpenMSE"),text.col = c("black","red"), bty="n")
-  matplot(yrs,cbind(B[ind],Best[ind]),col=c("black","red"),lty=1,lwd=1.5,type = 'l');grid()
+  matplot(yrs,cbind(B[ind],Best[ind]),ylab="Biomass (Mt)", col=c("black","red"),lty=1,lwd=1.5,type = 'l');grid()
   legend('topleft',legend=c(paste("R0 multiplier =",round(exp(pars[1]),3)),
-                            paste("Effort multiplier =",round(exp(pars[2]),3)),
-                            paste("Obj. F. =", round(obj,5))), bty="n")
+                            paste("Effort multiplier =",round(exp(-pars[1]) * exp(pars[2]),3)),
+                            paste("Obj. F. =", round(obj,5))), text.col = "red", bty="n")
 }  
+
+plotstat = function(om, B, R, ctrl){
+  hist = Simulate(om, control=ctrl)
+  Best = hist@Biomass[1,1,] * 1E-9
+  Rest = hist@Number[[1]][1,1,,1] * 1E-9
+  doplot(om2, B, R, Best, Rest, opt$par, obj = opt$value)
+
+}
 
 Int_Scale = function(pars, om, B, R, mode = 'opt', ctrl, plot=F){
   om = Apply_pars(om, pars)
@@ -383,7 +391,7 @@ Int_Scale = function(pars, om, B, R, mode = 'opt', ctrl, plot=F){
   Rest = hist@Number[[1]][1,1,,1] * 1E-9
   if(mode == 'opt')  obj = sum(abs(log(Best)-log(B)),na.rm=T) + sum(abs(log(Rest)-log(R)),na.rm=T)
   if(mode == 'optB')  obj = sum(abs(log(Best)-log(B)),na.rm=T)
-  if(plot) doplot(om, B, R, Best, Rest, obj)
+  if(plot) doplot(om, B, R, Best, Rest, pars, obj)
   if(grepl("opt", mode)){
     return(obj)
   }else{
@@ -392,55 +400,71 @@ Int_Scale = function(pars, om, B, R, mode = 'opt', ctrl, plot=F){
 } 
 
 opt = optim(c(0,0), Int_Scale, 
-      om = om, B = B, R = R, ctrl = ctrl, plot=T,
+      om = om, B = B, R = R, ctrl = ctrl, plot=F,
       method = "L-BFGS-B", control = list(factr = 1E12),
       lower = c(-2, -2), upper = c(2, 2))
 
 om2 = Apply_pars(om,opt$par)
+plotstat(om2, B, R, ctrl)
+
 
 for(i in 1:2){
-  hist = Simulate(om2, control=control)
+  hist = Simulate(om2, control=ctrl)
   Best = hist@Biomass[1,1,] * 1E-9
   Rest = hist@Number[[1]][1,1,,1] * 1E-9
-  doplot(om2, B, R, Best, Rest, obj = 0)
+  #doplot(om2, B, R, Best, Rest, opt$par, obj = 0)
   ratio = matrix(R/Rest,byrow=T,nrow=om@nSim,ncol=om@nYear)
   ratio[is.na(ratio)] = 1
   R0_adj = exp(log(ratio)*0.5)
   om2@Stock@SRR@RecDevHist[] = om2@Stock@SRR@RecDevHist[] * R0_adj
 }
 
-opt = optim(c(0,0), Int_Scale, 
-            om = om2, B = B, R = R, ctrl = ctrl, mode = "optB", plot=T,
+plotstat(om2, B, R, ctrl)
+
+opt2 = optim(c(0,0), Int_Scale, 
+            om = om2, B = B, R = R, ctrl = ctrl, mode = "optB", plot=F,
             method = "L-BFGS-B", control = list(factr = 1E12),
-            lower = c(-2, -2), upper = c(2, 2))
+            lower = c(-1, -1), upper = c(1, 1))
 
 
-om3 = Apply_pars(om2,opt$par)
-hist = Simulate(om2, control=control)
-  Best = hist@Biomass[1,1,] * 1E-9
-  Rest = hist@Number[[1]][1,1,,1] * 1E-9
-  doplot(om2, B, R, Best, Rest, obj = 0)
+om3 = Apply_pars(om2,opt2$par)
+
+plotstat(om3, B, R, ctrl)
+
 
 ```
-
-
-
 
 # Results
 
 ## Assessment Comparison
 
+The assessment model of de Moor (2025) includes spatial stock components, movement among areas and varying somatic growth and recruitment among areas. This complexity is required to correctly interpret input data. 
+
+However, the aggregate stock-wide recruitment, exploitation rate and abundance is well approximated by the annual, spatially aggregated model applied here. This approximation is suitable for the purposes of this operating model, namely to comparatively rate climate robustness of potential management procedures. 
+
 ## Example Projections
 
 
+```{r, echo=TRUE, eval=TRUE, fig.width = 7.5}
+Hist = Simulate(om3)
+MPs = c("CurrentEffort","refMSY","refMSY50","NoFishing")
+Proj = Project(Hist, MPs)
+muC = apply(Proj@Landings,c(3,5),mean)
+muB = apply(Proj@Biomass,c(3,4),mean)
+mpcols = c("black","green","blue","red")
+yrs = Years(om3, 'p')
+par(mfrow =c(1,2),mai=c(0.5,0.9,0.2,0.05))
+matplot(yrs, muC/1E6,type="l",lty=1, lwd=1.5, ylab="Mean projected catch (Kt)", col = mpcols)
+matplot(yrs, muB/1E6,type="l",lty=1, ylim = c(0, max(muB)*1.05/1E6), lwd=1.5, ylab="Mean projected biomass (Kt)", col = mpcols); grid()
+legend('topright', legend=MPs, text.col=mpcols, bty="n")
+```
+
 # Version Notes 
 
-The package is subject to ongoing testing and development. If you find a bug or a problem please send a report to <tom@bluematterscience.com> so that it can be fixed!  
+These operating models are subject to ongoing testing and development. If you find a bug or a problem please send a report to <tom@bluematterscience.com> so that it can be fixed!  
 
 <br>
 <hr>
-
-
 
 
 # In Development
@@ -454,8 +478,6 @@ plotatab2('Tables/Various.xlsx','ToDo')
 ```
 
 
-
-
 # Background information
 
 Project information, links and results are available from the Climate Test [project webpage](https://blue-matter.github.io/ClimateTest/)
@@ -467,7 +489,6 @@ Project information, links and results are available from the Climate Test [proj
 
 ## OpenMSE
 
-
 The [openMSE R package](https://openmse.com) was used to organize fishery data, define operating models, condition operating models to data, calculate reference points and specify and test existing and alternative management options. 
 
 Visit the [OpenMSE website](https://openmse.com) for more information on the framework including tutorial and case studies.
@@ -475,6 +496,10 @@ Visit the [OpenMSE website](https://openmse.com) for more information on the fra
 The Rapid Conditioning Model is also [described there](https://openmse.com/tutorial-rcm)
 
 Other useful openMSE apps include [MERA](https://www.merafish.org/) for rapidly scoping operating models and [Reference Point Calculator](https://shiny.bluematterscience.com/app/rpc) for investigating reference points and control rules. 
+
+## Climate Test
+
+The Climate Test is an extension of OpenMSE that allows for comparative robustness evaluation of candidate management procedures. For more information please visit the [project splash page](https://climatetest.bluematterscience.com)
 
 ## Management Strategy Evaluation
 
@@ -484,19 +509,47 @@ The Ocean Foundation host the [Harvest Strategies website](https://harveststrate
 <hr>
 
 
+# Climate Test Papers
+
+<div class="hanging-indent">
+
+[Carruthers, T.R.. 2024a. Developing the Climate Test: Robustness Trials for climate-ready management procedures. Col. Vol. Sci. Pap. ICCAT. 81(6): 1-26](https://www.iccat.int/Documents/CVSP/CV081_2024/n_6/CV08106104.pdf)
+
+[Carruthers, T.R., 2024b. Developing the Climate Test: Performance Metrics of Climate Robustness. Col. Vol. Sci. Pap. ICCAT. 81(2): 1-7](https://www.iccat.int/Documents/CVSP/CV081_2024/n_2/CV08102148.pdf)
+
+
 # References
+
+<div class="hanging-indent">
 
 Hordyk, A., Huynh, Q., Carruthers, T. 2025. OpenMSE: An open-source R package for Management strategy evaluation, available from: https://openmse.com
 
-Huynn, Q., 2025. Rapid Conditioning model. Available from [https://openmse.com/tutorial-rcm/](https://openmse.com/tutorial-rcm/) 
-
-Punt, A.E., Butterworth, D.S., de Moor, C.L., De Oliveira, J.A.A., and Haddon, M. 2016. Management strategy evaluation: Best practices. Fish Fish. 17(2): 303–334. doi:10.1111/faf.12104. 
-
-
-```{r, echo=FALSE, eval=FALSE}
-sfStop()                            
-```
 
 <br>
 <hr>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
 
+
+
+# Acknowledgements
+
+<br>
+
+<span style="font-size: 1.05em; display: block; text-align: center;">ClimateTest is funded by:
+
+<span style="font-size: 1.25em; display: block; text-align: center;">The Paul M. Angell Family Foundation</span> 
+<span style="font-size: 1.25em; display: block; text-align: center;">Oceankind</span>
+<span style="font-size: 1.25em; display: block; text-align: center;">The Pew Charitable Trusts</span>
+
+<span style="font-size: 1.05em; display: block; text-align: center;">and </span>
+
+<span style="font-size: 1.25em; display: block; text-align: center;">The Ocean Foundation in partnership with [www.HarvestStrategies.org](https://harveststrategies.org/)</span>
+
+<br>
