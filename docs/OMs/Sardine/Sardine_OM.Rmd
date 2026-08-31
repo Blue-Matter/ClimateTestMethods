@@ -563,7 +563,6 @@ Hordyk, A., Huynh, Q., Carruthers, T. 2025. OpenMSE: An open-source R package fo
 <span style="font-size: 1.25em; display: block; text-align: center;">The Ocean Foundation in partnership with [www.HarvestStrategies.org](https://harveststrategies.org/)</span>
 
 <br>
-
 <br>
 <hr>
 <br>
