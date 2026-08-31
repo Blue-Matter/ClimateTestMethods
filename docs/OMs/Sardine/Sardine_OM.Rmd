@@ -177,11 +177,11 @@ fleet@Name = "All commercial fleets (inc directed sardine and round herring)"
 
 ## Natural mortality rate 
 
-The operating model assumes the same natural mortality as the recent stock assessment (following the 2022 assessment of [de Moor (2022)](https://doi.org/10.25375/uct.22146602.v1)) that is 1.0 per year for juveniles (age 0) and 0.8 for mature fish (age 1+). 
+The operating model assumes the same natural mortality as the recent stock assessment (following the 2022 assessment of [de Moor (2022)](https://doi.org/10.25375/uct.22146602.v1)) that is 1.0 per year for juveniles (age 0) and 0.8 for mature fish (age 1+). The recruitment outputs we are conditioning on are end of age-0 and subject to the initial year of mortality, hence we assume zero mortality for age class zero in the OM. 
 
 ```{r, echo=TRUE, eval=TRUE}
 stock@Ages = Ages(6, MinAge = 0)                                            # Age 6 is the last age class for calculations of age-based vectors
-stock@NaturalMortality = NaturalMortality(MeanAtAge = c(0, 1.0, rep(0.8, 5)))   
+stock@NaturalMortality = NaturalMortality(MeanAtAge = c(0, rep(0.8, 6)))   
 plot(stock@Ages@Classes,stock@NaturalMortality@MeanAtAge, pch=19, lwd=2, xlab = "Age", ylim = c(0,1), ylab = "Inst. Nat. M. (per year)"); grid()
 ```
 
@@ -198,20 +198,20 @@ plot(0:6,stock@Length@MeanAtAge, lwd=2, type="l",xlab = "Age", ylab = "Length (c
 
 ## Weight-at-Length
 
-Assessment documentation does not provide a length-weight equation with parameters. For now I assumed the quadratic equation established by [Ndaula et al. (2013)](https://www.sciencedirect.com/science/article/abs/pii/S0165783613001586):
+The weight length-weight relationship follows that derived by [OLSPS Marine](refs/FISHERIES_2023_NOV_SWG-PEL_24Rev Sardine W-L Further Regressions.pdf). The relationship for both stock units combined is assumed to follow the relationship: 
 
-log10(W) = -1.825 + 2.679 x log10(L) + 0.224 x log10(L)^2
+W = 0.0000071118 * L ^ 3.181             (cm - kg)
 
-Note that the length-weight relationsip is largely inconsequential: both the length-weight relationship and unfished recruitment both control stock scale (catches and biomass) but numbers are not used in the model, only total catch and stock biomass. 
+Note that if MP advice is unitless (e.g. catch in the projection relative to catch in 2024) the length-weight relationship is largely inconsequential. To obtain the same scale the length-weight relationship is exactly inversly related to unfished recruitment and numbers are not used in the model. 
 
 ```{r, echo=TRUE, eval=TRUE, fig.width= 7}
-LT = log10(stock@Length@MeanAtAge)
-WT = 10^(-1.825 + 2.679 * LT + 0.224 * LT^2) / 1000 # kg
+LT =  stock@Length@MeanAtAge 
+WT =  0.0000071118 * LT ^ 3.181
 stock@Weight = Weight(MeanAtAge = WT)
 
 par(mfrow=c(1,2),mai=c(0.9,0.9,0.6,0.05))
 plot(0:6, WT, xlab="Age",ylab = "Weight (kg)",type="l", lwd=1.5)
-plot(10^LT, WT, type="l",lwd=1.5,xlab="Length (cm)",ylab = "Weight (kg)")
+plot(LT, WT, type="l",lwd=1.5,xlab="Length (cm)",ylab = "Weight (kg)")
 
 ```
 
@@ -233,7 +233,7 @@ This analysis should be derived from the estimates of spawning stock biomass (SS
 ```{r, echo=TRUE, eval=TRUE}
 
 B = est_yr$B_west + est_yr$B_south # Biomass Mt (could be unitless, R0 and steepness h are the targets)
-R = est_yr$R_west + est_yr$R_south # Billions of fish
+R = (est_yr$R_west + est_yr$R_south) # Billions of fish (technically, rec observations are June and need inflated by age 0 M)
 
 BH<-function(par, B, R, mode='opt', plot = F, tplot = F, curyr = 2024, pmu = 0.6, pcv = 0.1){ # optimization function for Bev-Holt SR
   h = 0.2 + 0.8 * (1 / (1 + exp(par[1]))); R0 = exp(par[2]);  BpR = max(B,na.rm=T) / R0       # logit between 0.2 and 1
@@ -326,12 +326,9 @@ fleet@Catchability = Catchability(Efficiency = 1)         # Populate catchabilit
 ## Initial OM
 
 ```{r, echo=TRUE, eval=TRUE}
-
 om@Stock = stock
 om@Fleet = fleet
 hist = Simulate(om)
-
-
 ```
 
 
@@ -343,7 +340,6 @@ Two components of the OM specification need to be adjusted to match estimated bi
 To do this we initialize the OM, estimate harvest rate, biomass and recruitment and wrap this into a bivariate optimization for unfished recruitement and apical F modifiers. 
 
 ```{r, echo=TRUE, eval=TRUE, message = FALSE, fig.width = 7.5}
-
 ctrl = SimControl(DynamicUnfished = FALSE,
                      RefLandings = FALSE,
                      RefRemovals = FALSE,
@@ -376,11 +372,11 @@ doplot = function(om, B, R, Best, Rest, pars, obj){
                             paste("Obj. F. =", round(obj,5))), text.col = "red", bty="n")
 }  
 
-plotstat = function(om, B, R, ctrl){
-  hist = Simulate(om, control=ctrl)
+plotstat = function(om2, B, R, ctrl, opt){
+  hist = Simulate(om2, control=ctrl)
   Best = hist@Biomass[1,1,] * 1E-9
   Rest = hist@Number[[1]][1,1,,1] * 1E-9
-  doplot(om2, B, R, Best, Rest, opt$par, obj = opt$value)
+  doplot(om = om2, B, R, Best, Rest, pars = opt$par, obj = opt$value)
 
 }
 
@@ -405,10 +401,10 @@ opt = optim(c(0,0), Int_Scale,
       lower = c(-2, -2), upper = c(2, 2))
 
 om2 = Apply_pars(om,opt$par)
-plotstat(om2, B, R, ctrl)
+plotstat(om2, B, R, ctrl, opt)
 
 
-for(i in 1:2){
+for(i in 1:3){
   hist = Simulate(om2, control=ctrl)
   Best = hist@Biomass[1,1,] * 1E-9
   Rest = hist@Number[[1]][1,1,,1] * 1E-9
@@ -419,7 +415,7 @@ for(i in 1:2){
   om2@Stock@SRR@RecDevHist[] = om2@Stock@SRR@RecDevHist[] * R0_adj
 }
 
-plotstat(om2, B, R, ctrl)
+plotstat(om2, B, R, ctrl, opt)
 
 opt2 = optim(c(0,0), Int_Scale, 
             om = om2, B = B, R = R, ctrl = ctrl, mode = "optB", plot=F,
@@ -429,16 +425,39 @@ opt2 = optim(c(0,0), Int_Scale,
 
 om3 = Apply_pars(om2,opt2$par)
 
-plotstat(om3, B, R, ctrl)
+plotstat(om3, B, R, ctrl, opt2)
 
 
 ```
+
+
+## Add Generic Observation Model for MP Testing
+
+```{r, echo=TRUE, eval=TRUE}
+
+ExampleObs <- Obs(CPUE = IndicesObs(CV = 0.3),                                # CPUE index
+                  Survey = IndicesObs(CV = 0.2, Selectivity = 'SBiomass'),    # spawning biomass survey
+                  Landings = CatchObs(CV = 0.025))                            # catches
+
+Obs(om3) <- list(list(ExampleObs))                                            # assign observation error model
+
+hist <- Simulate(om3)                                                         # historical reconstruction
+PlotIndexFit(hist, 'CPUE')                                                    # plot historical CPUE 
+PlotIndexFit(hist, 'Survey')                                                  # plot historical survey
+
+# Save outputs to the ClimateTest R package for lazyload
+SAS = om3
+save(SAS, file = "C:/GitHub/ClimateTest/data/SAS.rda")
+
+```
+
+
 
 # Results
 
 ## Assessment Comparison
 
-The assessment model of de Moor (2025) includes spatial stock components, movement among areas and varying somatic growth and recruitment among areas. This complexity is required to correctly interpret input data. 
+The assessment model of de Moor (2025) includes spatial stock components, movement among areas and varying somatic growth and recruitment among areas. This complexity is required to correctly interpret input data to that model. 
 
 However, the aggregate stock-wide recruitment, exploitation rate and abundance is well approximated by the annual, spatially aggregated model applied here. This approximation is suitable for the purposes of this operating model, namely to comparatively rate climate robustness of potential management procedures. 
 
