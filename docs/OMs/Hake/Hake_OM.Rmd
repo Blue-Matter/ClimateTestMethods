@@ -1,0 +1,575 @@
+---
+title: 'South African Sardine Operating Model Specification'
+author: "Tom Carruthers (<tom@bluematterscience.com>)"
+date: "`r Sys.Date()`"
+output:
+  rmarkdown::html_document:
+    number_sections: yes
+    toc: true
+    toc_float: true
+subtitle: A plausible hypothetical state of nature for investigating the tailored Climate Test. 
+vignette: >
+  %\VignetteIndexEntry{Inverts}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+<style type="text/css">
+
+pre code {
+  word-wrap: normal;
+  white-space: pre;
+}
+body{ /* Normal  */
+   font-size: 12px;
+}
+td {  /* Table  */
+   font-size: 9px;
+}
+h1 { /* Header 1 */
+ font-size: 18px;
+ color: DarkBlue;
+}
+h2 { /* Header 2 */
+ font-size: 15px;
+ color: DarkBlue;
+}
+h3 { /* Header 3 */
+ font-size: 14px;
+ color: DarkBlue;
+}
+code.r{ /* Code block */
+  font-size: 10px;
+}
+pre { /* Code block */
+  font-size: 10px;
+  overflow-x: auto;
+}
+</style>
+
+<img src="Img/sardinehunt.png" width = 910>
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<img src="Img/BM.jpg" width="140">
+<img src="Img/openMSE.jpg" width="150"> 
+&nbsp;&nbsp;
+<img src="Img/HS.png" width="225">
+
+```{r, include = FALSE}
+
+library(readxl)
+library(kableExtra)
+#library(ClimateTest)
+
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+knitr::opts_chunk$set(dpi=85, fig.width=5.5, fig.height = 4.1, message = F)
+
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+
+options(width = 650)
+X = Y = 0
+plus=function(){X=X+1;assign("X",X, envir = globalenv())}
+getF = function(rel=1){X+rel}
+Tplus = function(){Y=Y+1;assign("Y",Y, envir = globalenv())}
+getT = function(rel=1){Y+rel}
+
+par(mai=c(0.9,0.9,0.2,0.05))
+
+plotatab2 <- function(filey,sheet,head=T){
+  if(head){
+    dat = read_xlsx(filey,sheet)
+    kable(dat,"simple") 
+  }else{
+    dat = read_xlsx(filey,sheet,col_names=F)
+    kable(dat,"simple",col.names=rep("",ncol(dat))) 
+  }
+}
+
+
+```
+
+
+<br>
+<hr>
+
+
+# Foreword
+
+This operating model is for conducting are exploratory, didactic analyses and is not intended to inform management decision making at this stage. All data used in the construction of these operating models are publicly available from sources that are cited. 
+
+<br>
+<hr>
+
+
+# Introduction
+
+This operating model aims to closely mimic a [recent stock assessment for South African Sardine by de Moor (2025)](https://science.uct.ac.za/maram/2025-workshop) for the purposes of testing the robustness of management procedures to projected climate changes originating from an Ecoystem Model (Ortega et al. XXX). 
+
+The assessment includes a recently revised hypothesis for sardine stock structure and includes West and South stock components with varying somatic growth ([Assessment Document BG4, de Moor 2025](https://science.uct.ac.za/sites/default/files/media/documents/science_uct_ac_za/2066/iws-2025-sardine-bg4.pdf)). 
+
+The focus of this operating model is capturing the overall stock dynamics in terms of resilience, magnitude and natural variability for the purpose of evaluating under projections, various management porcedures (MP) that set annual advice. As such the focus not capturing the detailed historical spatial and seasonal dynamics necessary to interpret historical data correctly (a primary challenge for the assessment) but rather to use the assessment estimates for evaluating MPs. For this reason the operating model is spatially aggregated and captures the stock-wide dynamics informed by the recent stock assessment. 
+
+<br>
+<hr>
+
+# Methods
+
+## OpenMSE 2.0
+
+OpenMSE operating models were configured to match the aggregate age-structured dynamics of the [stock assessment](https://science.uct.ac.za/sites/default/files/media/documents/science_uct_ac_za/2066/iws-2025-sardine-bg4.pdf) closely matching the estimates of harvest rate, recruitment and biomass. 
+
+## OM Initialization 
+
+```{r, echo=TRUE, eval=TRUE}
+library(openMSE)
+library(readxl)
+packageVersion('MSEtool') # should be v4x
+
+# AI extracted estimates of recent assessed biomass, recruitment, harvest rate, selectivity, maturity and somatic growth
+est_yr =  as.data.frame(readxl::read_xlsx('Data/SA_Sardine_2025_estimates.xlsx', 'ByYear'))
+est_len = as.data.frame(readxl::read_xlsx('Data/SA_Sardine_2025_estimates.xlsx', 'ByLength'))
+est_age = as.data.frame(readxl::read_xlsx('Data/SA_Sardine_2025_estimates.xlsx', 'ByAge'))
+
+# Create blank operating model and fill details
+om = new('om') 
+om@Name = "South African Sardine"
+om@Longitude = 20
+om@Latitude  = -35
+om@Author = 'Tom Carruthers'
+om@Agency = 'Blue Matter'
+om@Email = 'tom@bluematterscience.com'
+om@Region = "South Africa"
+om@Sponsor = "The Ocean Foundation"
+om@Source = "https://climatetest.bluematterscience.com"
+
+# Basic Config
+Years = est_yr$Year           # historical year labels
+ny = length(Years)            # number of historical years
+om@nYear = ny                 # historical year
+om@pYear = 50                 # 50 projected years
+om@Interval = 1               # management updated every 1 year
+om@DataLag = 1                # data available from last year (not in-season management)
+om@nSim = 48                  # No. realisations of stock and fleet dynamics
+om@CurrentYear = max(Years)   # label for most recent historical year
+om@Years = Years(om)          # all year labels
+om@Seasons = 1                # Annual OM
+om@maxF = 3                   # maximum apical exploitation rate is 3.0 (harvest rate of 95%)
+om@Seed = 1                   # random seed for stochastic sampling
+om@Log[[1]] = paste("OM created:", Sys.Date()) 
+
+```
+
+## Stock and Fleet Initialization 
+
+```{r, echo=TRUE, eval=TRUE}
+stock = new('stock')
+stock@Name = 'South African Sardine'
+stock@CommonName = 'Sardine'
+stock@Species = 'Sardinops sagax'
+
+fleet = new('fleet')
+fleet@Name = "All commercial fleets (inc directed sardine and round herring)"
+```
+
+
+## Natural mortality rate 
+
+The operating model assumes the same natural mortality as the recent stock assessment (following the 2022 assessment of [de Moor (2022)](https://doi.org/10.25375/uct.22146602.v1)) that is 1.0 per year for juveniles (age 0) and 0.8 for mature fish (age 1+). The recruitment outputs we are conditioning on are end of age-0 and subject to the initial year of mortality, hence we assume zero mortality for age class zero in the OM. 
+
+```{r, echo=TRUE, eval=TRUE}
+stock@Ages = Ages(6, MinAge = 0)                                            # Age 6 is the last age class for calculations of age-based vectors
+stock@NaturalMortality = NaturalMortality(MeanAtAge = c(0, rep(0.8, 6)))   
+plot(stock@Ages@Classes,stock@NaturalMortality@MeanAtAge, pch=19, lwd=2, xlab = "Age", ylim = c(0,1), ylab = "Inst. Nat. M. (per year)"); grid()
+```
+
+## Somatic Growth
+
+The operating model assumes an length-at-age vector that is the unweighted mean of the South and West curves used by the 2025 assessment [de Moor 2025](https://science.uct.ac.za/sites/default/files/media/documents/science_uct_ac_za/2066/iws-2025-sardine-bg4.pdf).
+
+```{r, echo=TRUE, eval=TRUE}
+Classes = 1:ceiling(max(est_age$Length)*1.3)   
+stock@Length = Length(MeanAtAge = c(est_age$Length,est_age$Length[6]),  # Need to add another asympotic length to make 7 age classes (first is age-0)
+                      Classes = 1:ceiling(max(est_age$Length)*1.3) )    # Length classes
+plot(0:6,stock@Length@MeanAtAge, lwd=2, type="l",xlab = "Age", ylab = "Length (cm)"); grid()
+```
+
+## Weight-at-Length
+
+The weight length-weight relationship follows that derived by [OLSPS Marine](refs/FISHERIES_2023_NOV_SWG-PEL_24Rev Sardine W-L Further Regressions.pdf). The relationship for both stock units combined is assumed to follow the relationship: 
+
+W = 0.0000071118 * L ^ 3.181             (cm - kg)
+
+Note that if MP advice is unitless (e.g. catch in the projection relative to catch in 2024) the length-weight relationship is largely inconsequential. To obtain the same scale the length-weight relationship is exactly inversly related to unfished recruitment and numbers are not used in the model. 
+
+```{r, echo=TRUE, eval=TRUE, fig.width= 7}
+LT =  stock@Length@MeanAtAge 
+WT =  0.0000071118 * LT ^ 3.181
+stock@Weight = Weight(MeanAtAge = WT)
+
+par(mfrow=c(1,2),mai=c(0.9,0.9,0.6,0.05))
+plot(0:6, WT, xlab="Age",ylab = "Weight (kg)",type="l", lwd=1.5)
+plot(LT, WT, type="l",lwd=1.5,xlab="Length (cm)",ylab = "Weight (kg)")
+
+```
+
+## Maturity
+
+The maturity ogive followed that specified by a preliminary MSE operating model of [de Moor (2025)](https://science.uct.ac.za/sites/default/files/media/documents/science_uct_ac_za/2066/iws-2025-sardine-bg5.pdf). This prescribes a logistic model with a length 50% maturity of 11.8811 cm with a rate of increase in maturity at length of 1.9311
+
+```{r, echo=TRUE, eval=TRUE}
+stock@Maturity = Maturity(MeanAtLength = 1/(1+exp(-(Classes - 11.88)/1.93)), Classes = Classes)
+plot(Classes,stock@Maturity@MeanAtLength, lwd=2, type="l",xlab = "Length (cm)", ylab = "Fraction Mature"); grid()
+```
+
+## Recruitment
+
+Annual recruitment estimates for the West and South stock components were summed to obtain overall stock recruitment. This was related to estimated biomass to derive two model parameters: unfished recruitment (R0, scale, carring capacity) and steepness (resilience). 
+
+This analysis should be derived from the estimates of spawning stock biomass (SSB) from the stock assessment but these are not provided in the publically available reports. 
+
+```{r, echo=TRUE, eval=TRUE}
+
+B = est_yr$B_west + est_yr$B_south # Biomass Mt (could be unitless, R0 and steepness h are the targets)
+R = (est_yr$R_west + est_yr$R_south) # Billions of fish (technically, rec observations are June and need inflated by age 0 M)
+
+BH<-function(par, B, R, mode='opt', plot = F, tplot = F, curyr = 2024, pmu = 0.6, pcv = 0.1){ # optimization function for Bev-Holt SR
+  h = 0.2 + 0.8 * (1 / (1 + exp(par[1]))); R0 = exp(par[2]);  BpR = max(B,na.rm=T) / R0       # logit between 0.2 and 1
+  Rpred<-((0.8 * R0 * h * B) / (0.2 * BpR * R0 * (1 - h) + (h - 0.2) * B))                    # predicted recruitment 
+  if(plot) {plot(B,R,pch=19); points(B, Rpred,col='red');                                     # plot fitted SR curve 
+            legend('topleft',legend=c(paste("h =",round(h,3)),paste("R0 =",round(R0,3))),text.col="red",bty="n")}
+  if(mode=='opt')return(-sum(dnorm(log(Rpred)-log(R),0,0.5,log=T), na.rm=T)-dnorm(pmu,h,pcv,log=T))  # add prior on h
+  if(mode != "opt") return(log(R / Rpred))                                                    # return log rec devs
+}
+
+opt = optim(par = c(0,log(max(R,na.rm=T)/2)), BH, # optimize for h and R0 from initial values of 0.6 and half the max R
+            B =  B, R = R, method = "L-BFGS-B",   # bounded optimization
+            lower = c(-4,log(10)),                # broad limits
+            upper = c(4,log(50)))                 # broad limits
+
+
+RD = BH(opt$par, B, R, plot=T, mode = "devs") # recruitment deviations  
+R0 = exp(opt$par[2]) * 1E9                    # 'unfished' recruitment
+h = 0.2 + 0.8 * (1 / (1 + exp(opt$par[1])))   # steepness of the B-H S-R function
+AC = acf(RD[!is.na(RD)],1)$acf[2,1,1]         # lag-1 recruitment autocorrelation
+SD = sd(RD, na.rm=T)                          # lognormal recruitment process error ('sigma-R')          
+
+
+DepGuess = (B[1]/quantile(B,0.5,na.rm=T))                                   # depletion guess
+RecDevInit = matrix(DepGuess, nrow = om@nSim, ncol = stock@Ages@MaxAge)     # initial rec devs go into year 1 of RecDevHist
+RecDevHist = matrix(exp(RD),nrow = om@nSim, ncol = ny, byrow = T)           # historical rec devs
+RecDevProj = matrix(NA,nrow = om@nSim, ncol = om@pYear)                     # projected rec devs
+nterminal = sum(is.na(RD))                                                  # No. terminal years in need of filling
+fyears = rev(rev(om@Years)[1:(nterminal + om@pYear)])                       # labels for years that need filling
+res = MSEtool::GenResiduals(SD, rep(AC,om@nSim), fyears, om@nSim, TruncSD = 3, 
+                            LastError = exp(RecDevHist[,ny-nterminal]))     # generated residuals with AC and SD
+RecDevHist[,(ny-nterminal+1):ny] = res[,1:nterminal]                        # populate terminal rec devs
+RecDevProj = res[, (nterminal+1):ncol(res)]                                 # populate projected rec devs
+
+stock@SRR = SRR(Pars=list(h=h), R0 = R0, AC = AC, RecDevInit = RecDevInit,  # build Stock Rec. Rel. slot
+                RecDevHist = RecDevHist, RecDevProj = RecDevProj)
+
+matplot(Years(om, Period = "P"), t(RecDevProj[1:4,]),lty=1,type="l",
+        xlab="Proj. Year",ylab ="Rec. Dev.", main="4 Simulations"); grid()
+legend('topleft',legend=c(paste("SD =",round(SD,2)),paste("Lag-1 AC =", round(AC,2))))
+
+```
+
+The estimated stock biomass and estimated recruitment cannot be considered as independent (biomass) and dependent (recruitment) variables because biomass itself is a product of recruitment, and this is particularly the case for short-lived species such as sardine. The inter-dependency of these variables generally leads to an overestimate of stock resilience because higher than average recruitment is required at low stock sizes (and vice versa) to drive changes in the biomass levels. 
+
+It is therefore remarkable how little recruitment compensation is estimated (even in this post-hoc fitting). In this case, a relatively informative prior on a steepness (a level of 0.6 which is moderate resilience) barely drags steepness estimates above a value of 0.3. Without this prior, the estimated steepness tends to its lowest possible value of 0.2 which is ecologically implausible (a stock without compensation has a very high probability of extinction). 
+
+This analysis should be revised and updated given SSB estimates from the assessment. 
+
+
+## Selectivity 
+
+Commercial fishery selectivity follows the length-based-vector of the most recent estimated year of the stock assessment. 
+
+```{r, echo=TRUE, eval=TRUE}
+
+nl = length(Classes)                                        # No. length classes
+MeanAtLength = rep(0, nl)                                   # fill a vector with zero selectivity
+ind = match(est_len$Length, Classes)                        # get correct indexing for estimated selectivity
+MeanAtLength[ind] = est_len$Selectivity                     # map estimated selectivity
+MeanAtLength[max(ind):nl] = 1                               # fill upper range with 100% selectivity (asymptotic)
+
+fleet@Selectivity = Selectivity(MeanAtLength = MeanAtLength,
+                                Classes = Classes)
+
+plot(Classes,MeanAtLength, lwd=2, type="l",xlab = "Length (cm)", ylab = "Commercial Selectivity", main = "Estimated by Assessment in 2024"); grid()
+lines(Classes,stock@Maturity@MeanAtLength, lwd=1.5, lty=2,col='red'); 
+legend('topleft', legend = c("Selectivity", "Fraction Mature"),text.col = c("black","red"),bty='n')
+
+```
+
+## Apical F
+
+The stock assessment reports provide a time-series estimate of harvest rate (U) for the combined West and South components. This is converted to an guess of apical F that will be later adjusted to match historical biomass estimates. 
+
+
+```{r, echo=TRUE, eval=TRUE}
+
+U = est_yr$U                                              # harvest rate times series (S and W combined)
+Adj_vuln = 0.5                                            # apical F and selectivity curve is 50% of the biomass available (U)
+F_guess = -log(1-U) / Adj_vuln                            # initial guess of F time series
+Eff = matrix(F_guess, nrow=om@nSim, ncol=ny, byrow = T, 
+             dimnames = list(1:om@nSim,Years(om,'h')))    # Effort matrix with correct year labels
+fleet@Effort = Effort(Effort = Eff)                       # Populate historical effort slot
+fleet@Catchability = Catchability(Efficiency = 1)         # Populate catchability slot, F = qE, hence F = E as specified
+
+```
+
+
+## Initial OM
+
+```{r, echo=TRUE, eval=TRUE}
+om@Stock = stock
+om@Fleet = fleet
+hist = Simulate(om)
+```
+
+
+
+## Scale optimization
+
+Two components of the OM specification need to be adjusted to match estimated biomass, recruitment and harvest rate: unfished recruitment (scale), apical F mismatch. 
+
+To do this we initialize the OM, estimate harvest rate, biomass and recruitment and wrap this into a bivariate optimization for unfished recruitement and apical F modifiers. 
+
+```{r, echo=TRUE, eval=TRUE, message = FALSE, fig.width = 7.5}
+ctrl = SimControl(DynamicUnfished = FALSE,
+                     RefLandings = FALSE,
+                     RefRemovals = FALSE,
+                     ConditionObs = FALSE,
+                     EstimateBeta = FALSE,
+                     GenerateData = FALSE,
+                     MSYRefs = FALSE,
+                     RefPoints = FALSE,
+                     MGT = FALSE,
+                     BLow = FALSE)
+
+
+Apply_pars = function(om, pars){
+  R0mult = exp(pars[1])
+  Emult = exp(-pars[1]) * exp(pars[2])                      # fried egg please!
+  om@Stock@SRR@R0 = om@Stock@SRR@R0 * R0mult
+  om@Fleet@Effort@Effort =  om@Fleet@Effort@Effort * Emult
+  om
+}
+
+
+doplot = function(om, B, R, Best, Rest, pars, obj){
+  par(mfrow =c(1,2),mai=c(0.5,0.9,0.2,0.05))
+  ind = !is.na(R); yrs = Years(om, 'h')[ind]
+  matplot(yrs, cbind(R[ind],Rest[ind]), ylab = "Recruitment (B)", col=c("black","red"),lty=1,lwd=1.5,type = 'l');grid()
+  legend('topleft',legend=c("Assessment","OpenMSE"),text.col = c("black","red"), bty="n")
+  matplot(yrs,cbind(B[ind],Best[ind]),ylab="Biomass (Mt)", col=c("black","red"),lty=1,lwd=1.5,type = 'l');grid()
+  legend('topleft',legend=c(paste("R0 multiplier =",round(exp(pars[1]),3)),
+                            paste("Effort multiplier =",round(exp(-pars[1]) * exp(pars[2]),3)),
+                            paste("Obj. F. =", round(obj,5))), text.col = "red", bty="n")
+}  
+
+plotstat = function(om2, B, R, ctrl, opt){
+  hist = Simulate(om2, control=ctrl)
+  Best = hist@Biomass[1,1,] * 1E-9
+  Rest = hist@Number[[1]][1,1,,1] * 1E-9
+  doplot(om = om2, B, R, Best, Rest, pars = opt$par, obj = opt$value)
+
+}
+
+Int_Scale = function(pars, om, B, R, mode = 'opt', ctrl, plot=F){
+  om = Apply_pars(om, pars)
+  hist = Simulate(om, control = ctrl)
+  Best = hist@Biomass[1,1,] * 1E-9
+  Rest = hist@Number[[1]][1,1,,1] * 1E-9
+  if(mode == 'opt')  obj = sum(abs(log(Best)-log(B)),na.rm=T) + sum(abs(log(Rest)-log(R)),na.rm=T)
+  if(mode == 'optB')  obj = sum(abs(log(Best)-log(B)),na.rm=T)
+  if(plot) doplot(om, B, R, Best, Rest, pars, obj)
+  if(grepl("opt", mode)){
+    return(obj)
+  }else{
+    pars
+  }
+} 
+
+opt = optim(c(0,0), Int_Scale, 
+      om = om, B = B, R = R, ctrl = ctrl, plot=F,
+      method = "L-BFGS-B", control = list(factr = 1E12),
+      lower = c(-2, -2), upper = c(2, 2))
+
+om2 = Apply_pars(om,opt$par)
+plotstat(om2, B, R, ctrl, opt)
+
+
+for(i in 1:3){
+  hist = Simulate(om2, control=ctrl)
+  Best = hist@Biomass[1,1,] * 1E-9
+  Rest = hist@Number[[1]][1,1,,1] * 1E-9
+  #doplot(om2, B, R, Best, Rest, opt$par, obj = 0)
+  ratio = matrix(R/Rest,byrow=T,nrow=om@nSim,ncol=om@nYear)
+  ratio[is.na(ratio)] = 1
+  R0_adj = exp(log(ratio)*0.5)
+  om2@Stock@SRR@RecDevHist[] = om2@Stock@SRR@RecDevHist[] * R0_adj
+}
+
+plotstat(om2, B, R, ctrl, opt)
+
+opt2 = optim(c(0,0), Int_Scale, 
+            om = om2, B = B, R = R, ctrl = ctrl, mode = "optB", plot=F,
+            method = "L-BFGS-B", control = list(factr = 1E12),
+            lower = c(-1, -1), upper = c(1, 1))
+
+
+om3 = Apply_pars(om2,opt2$par)
+
+plotstat(om3, B, R, ctrl, opt2)
+
+
+```
+
+
+## Add Generic Observation Model for MP Testing
+
+```{r, echo=TRUE, eval=TRUE}
+
+ExampleObs <- Obs(CPUE = IndicesObs(CV = 0.3),                                # CPUE index
+                  Survey = IndicesObs(CV = 0.2, Selectivity = 'SBiomass'),    # spawning biomass survey
+                  Landings = CatchObs(CV = 0.025))                            # catches
+
+Obs(om3) <- list(list(ExampleObs))                                            # assign observation error model
+
+hist <- Simulate(om3)                                                         # historical reconstruction
+PlotIndexFit(hist, 'CPUE')                                                    # plot historical CPUE 
+PlotIndexFit(hist, 'Survey')                                                  # plot historical survey
+
+# Save outputs to the ClimateTest R package for lazyload
+SAS = om3
+save(SAS, file = "C:/GitHub/ClimateTest/data/SAS.rda")
+
+```
+
+
+
+# Results
+
+## Assessment Comparison
+
+The assessment model of de Moor (2025) includes spatial stock components, movement among areas and varying somatic growth and recruitment among areas. This complexity is required to correctly interpret input data to that model. 
+
+However, the aggregate stock-wide recruitment, exploitation rate and abundance is well approximated by the annual, spatially aggregated model applied here. This approximation is suitable for the purposes of this operating model, namely to comparatively rate climate robustness of potential management procedures. 
+
+## Example Projections
+
+
+```{r, echo=TRUE, eval=TRUE, fig.width = 7.5}
+Hist = Simulate(om3)
+MPs = c("CurrentEffort","refMSY","refMSY50","NoFishing")
+Proj = Project(Hist, MPs)
+muC = apply(Proj@Landings,c(3,5),mean)
+muB = apply(Proj@Biomass,c(3,4),mean)
+mpcols = c("black","green","blue","red")
+yrs = Years(om3, 'p')
+par(mfrow =c(1,2),mai=c(0.5,0.9,0.2,0.05))
+matplot(yrs, muC/1E6,type="l",lty=1, lwd=1.5, ylab="Mean projected catch (Kt)", col = mpcols)
+matplot(yrs, muB/1E6,type="l",lty=1, ylim = c(0, max(muB)*1.05/1E6), lwd=1.5, ylab="Mean projected biomass (Kt)", col = mpcols); grid()
+legend('topright', legend=MPs, text.col=mpcols, bty="n")
+```
+
+# Version Notes 
+
+These operating models are subject to ongoing testing and development. If you find a bug or a problem please send a report to <tom@bluematterscience.com> so that it can be fixed!  
+
+<br>
+<hr>
+
+
+# In Development
+
+Outstanding tasks: 
+
+```{r ToDo, eval=T,echo=F}
+
+plotatab2('Tables/Various.xlsx','ToDo')
+
+```
+
+
+# Background information
+
+Project information, links and results are available from the Climate Test [project webpage](https://blue-matter.github.io/ClimateTest/)
+
+<br>
+<hr>
+
+# Software
+
+## OpenMSE
+
+The [openMSE R package](https://openmse.com) was used to organize fishery data, define operating models, condition operating models to data, calculate reference points and specify and test existing and alternative management options. 
+
+Visit the [OpenMSE website](https://openmse.com) for more information on the framework including tutorial and case studies.
+
+The Rapid Conditioning Model is also [described there](https://openmse.com/tutorial-rcm)
+
+Other useful openMSE apps include [MERA](https://www.merafish.org/) for rapidly scoping operating models and [Reference Point Calculator](https://shiny.bluematterscience.com/app/rpc) for investigating reference points and control rules. 
+
+## Climate Test
+
+The Climate Test is an extension of OpenMSE that allows for comparative robustness evaluation of candidate management procedures. For more information please visit the [project splash page](https://climatetest.bluematterscience.com)
+
+## Management Strategy Evaluation
+
+The Ocean Foundation host the [Harvest Strategies website](https://harveststrategies.org/) which is an excellent resource describing MSE, MSE concepts and how MSE can be used in fishery management including introductory videos and interviews with experts. 'Harvest strategy' and Management Procedure are synonymous by the way. 
+
+<br>
+<hr>
+
+
+# Climate Test Papers
+
+<div class="hanging-indent">
+
+[Carruthers, T.R.. 2024a. Developing the Climate Test: Robustness Trials for climate-ready management procedures. Col. Vol. Sci. Pap. ICCAT. 81(6): 1-26](https://www.iccat.int/Documents/CVSP/CV081_2024/n_6/CV08106104.pdf)
+
+[Carruthers, T.R., 2024b. Developing the Climate Test: Performance Metrics of Climate Robustness. Col. Vol. Sci. Pap. ICCAT. 81(2): 1-7](https://www.iccat.int/Documents/CVSP/CV081_2024/n_2/CV08102148.pdf)
+
+<br>
+<hr>
+
+# References
+
+<div class="hanging-indent">
+
+Hordyk, A., Huynh, Q., Carruthers, T. 2025. OpenMSE: An open-source R package for Management strategy evaluation, available from: https://openmse.com
+
+<br>
+<hr>
+
+# Acknowledgements
+
+<br>
+
+<span style="font-size: 1.05em; display: block; text-align: center;">ClimateTest is funded by:
+
+<span style="font-size: 1.25em; display: block; text-align: center;">The Paul M. Angell Family Foundation</span> 
+<span style="font-size: 1.25em; display: block; text-align: center;">Oceankind</span>
+<span style="font-size: 1.25em; display: block; text-align: center;">The Pew Charitable Trusts</span>
+
+<span style="font-size: 1.05em; display: block; text-align: center;">and </span>
+
+<span style="font-size: 1.25em; display: block; text-align: center;">The Ocean Foundation in partnership with [www.HarvestStrategies.org](https://harveststrategies.org/)</span>
+
+<br>
+<br>
+<hr>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
