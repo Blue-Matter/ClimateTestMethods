@@ -106,7 +106,7 @@ This operating model is for conducting are exploratory, didactic analyses and is
 
 # Introduction
 
-This operating model aims to closely mimic a [recent stock assessment for South African Sardine by de Moor (2025)](https://science.uct.ac.za/maram/2025-workshop) for the purposes of testing the robustness of management procedures to projected climate changes originating from an Ecoystem Model (Ortega et al. XXX). 
+This operating model aims to closely mimic a [recent stock assessment for South African Sardine by de Moor (2025)](https://science.uct.ac.za/maram/2025-workshop) for the purposes of testing the robustness of management procedures to projected climate changes originating from an Atlantis Ecosystem Model ([Ortega-Cisneros et al. 2018][https://onlinelibrary.wiley.com/doi/10.1111/fog.12268]). 
 
 The assessment includes a recently revised hypothesis for sardine stock structure and includes West and South stock components with varying somatic growth ([Assessment Document BG4, de Moor 2025](https://science.uct.ac.za/sites/default/files/media/documents/science_uct_ac_za/2066/iws-2025-sardine-bg4.pdf)). 
 
