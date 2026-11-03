@@ -1,5 +1,5 @@
 ---
-title: 'South African Hake Operating Model Specification'
+title: 'Shallow Water Cape Hake Operating Model Specification'
 author: "Tom Carruthers (<tom@bluematterscience.com>)"
 date: "`r Sys.Date()`"
 output:
@@ -106,26 +106,89 @@ This operating model is for conducting are exploratory, didactic analyses and is
 
 # Introduction
 
-This operating model aims to closely mimic a recent reference case stock assessment for South African Hake by [Ross-Gillespie et al. (2025)](https://zivahub.uct.ac.za/articles/standard/Update_to_the_hake_Reference_Case_Operating_Model_with_inclusion_of_the_2024_commercial_data/30680402/1) for the purposes of testing the robustness of management procedures to projected climate changes originating from an Atlantis Ecosystem Model ([Ortega-Cisneros et al. 2018][https://onlinelibrary.wiley.com/doi/10.1111/fog.12268]). 
+This operating model (OM) aims to closely mimic a recent reference set of OMs for shallow-water Cape hake, *Merluccius capensis*, by [Ross-Gillespie et al. (2025)](https://zivahub.uct.ac.za/articles/standard/Update_to_the_hake_Reference_Case_Operating_Model_with_inclusion_of_the_2024_commercial_data/30680402/1), for the purposes of testing the robustness of management procedures to projected climate changes originating from an Atlantis Ecosystem Model ([Ortega-Cisneros et al. 2018][https://onlinelibrary.wiley.com/doi/10.1111/fog.12268]). 
 
-The Hake species...
+*M. capensis* is caught off the south and west coasts of South Africa together with the deep-water Cape hake, *M. paradoxus*. The two species are hard to distinguish. Catches are split between them using a species-splitting algorithm (Ross-Gillespie and Butterworth, 2024). Most of the *M. capensis* catch comes from the offshore trawl fleet on both coasts. The remaining catch is taken by the inshore trawl fleet on the south coast, by longline on both coasts and by a south-coast handline fishery. The handline fishery was significant in the early 2000s (up to 7.3 thousand tons in 2001) but has been much reduced since around 2010. Total *M. capensis* catches peaked at about 53 thousand tons in 1985 and have since fluctuated between about 20 and 39 thousand tons, averaging about 28 thousand tons over 2014–2023 (22.5 thousand tons in 2023). 
 
-###
+The resource is managed under OMP-2022, a management procedure tested against a Reference Set of nine age-structured, species- and sex-disaggregated operating models. These models are conditioned on commercial catches, GLM-standardised CPUE series, research survey abundance estimates (west coast summer and south coast autumn series from 1985 and 1988 respectively) and catch-at-length and age–length data. The Reference Set spans three stock–recruitment forms (Ricker, and Beverton–Holt with steepness of 0.9 or 0.7) and three central years for the assumed historical catch series (1952, 1958 and 1963). In the 2024 update, the Reference Case model (Ricker, central year 1958) estimates female spawning biomass of 175 thousand tons in 2024. That is 77% of the pristine level and about three times B_MSY. Most of the other Reference Set models also estimate the stock to be well above B_MSY. However, two runs estimate a much more depleted *M. capensis stock*, and the authors note that the data do not determine depletion well (Ross-Gillespie and Butterworth, 2024). The 2025 update of the Reference Case adds the 2024 commercial data (Ross-Gillespie et al., 2025).
+
+The focus of this operating model is capturing the overall stock dynamics in terms of resilience, magnitude and natural variability for the purpose of evaluating under projection, various management porcedures (MP) that set annual advice. As such the focus here is not capturing the detailed historical spatial and seasonal dynamics necessary to interpret historical data correctly (a primary challenge for the assessment) but rather to use the assessment estimates for evaluating MPs. For this reason the operating model is sex aggregated (somatic growth and weight at length, is very similar among male and female hake in any case). In this Climate Test application we chose to use the Ricker stock-recruitment assumption of Ross-Gillepsie and Butterworth (2024) since it provides greater contrast in historical biomass levels and a higher sensitivity to possible climate impacts on stock productivity. The historical catch series used for conditioning was relatively non-impactful and the central '1958' series was used for OM construction in this application.  
+
+
+```{r notes, echo=FALSE, eval=FALSE}
+
 https://docs.openmse.com/om-built-in.html#complexom
 
 you build the two stock objects, then for male make SRR@SPFrom = 1 assuming female is first stock
 [10:47 AM]and add Complexes  = list(Combined = 1:2)  or whatever you call it (that might be done automatically).
 that way it treats the two stocks as one complex for management and data generation
-####
+
+```
 
 
-
-The focus of this operating model is capturing the overall stock dynamics in terms of resilience, magnitude and natural variability for the purpose of evaluating under projections, various management porcedures (MP) that set annual advice. As such the focus not capturing the detailed historical spatial and seasonal dynamics necessary to interpret historical data correctly (a primary challenge for the assessment) but rather to use the assessment estimates for evaluating MPs. For this reason the operating model is spatially aggregated and captures the stock-wide dynamics informed by the recent stock assessment. 
 
 <br>
 <hr>
 
 # Methods
+
+## Data Extraction from Conditioned Operating models
+
+Catch data, survey data, growth estimates, weight at length relationships and model estimates of biomass and stock status were digitally extracted from the operating model conditioning reports of Rademeyer et al. (2019), Ross-Gillepsie and Butterworth (2024) and Ross-Gillespie et al. (2025):
+
+```{r, echo=TRUE, eval=TRUE}
+library(readxl)
+
+setwd("C:/GitHub/ClimateTestMethods/docs/OMs/Hake")
+xlsx <- "data/M_capensis_hake_extract.xlsx"   # edit path as needed
+
+rd <- function(sheet, range, names) {
+  df <- as.data.frame(read_excel(xlsx, sheet = sheet, range = range,
+                                 col_names = names, na = c("", "-")))
+  df[rowSums(!is.na(df)) > 0, , drop = FALSE]   # drop any fully empty rows
+}
+
+# 1. M. capensis catches by fleet (thousand t), Table 1, 1978-2023
+#    Blank in source ("-") -> NA. Total columns are the workbook formulas' values.
+catches <- rd("Catches_Mcapensis", "A5:J50",
+  c("Year", "Offshore_WC", "Offshore_SC", "Inshore_SC", "Longline_WC",
+    "Longline_SC", "Handline_SC", "Offshore_total", "Longline_total", "All_total"))
+
+# 2. M. capensis survey biomass and s.e. (thousand t), Table 3b, 1985-2024
+survey <- rd("Survey_Mcapensis", "A5:I44",
+  c("Year", "WC_Summer", "WC_Summer_se", "WC_Winter", "WC_Winter_se",
+    "SC_Spring", "SC_Spring_se", "SC_Autumn", "SC_Autumn_se"))
+
+# 3. Figure 2a panels 11/14/17 (RS02, Ricker, central year 1958), digitized, 1917-2024
+#    Bsp_K is NA for 1917-1925 (line hidden behind the panel label).
+fig2a <- rd("Fig2a_RS02_digitized", "A5:D112",
+  c("Year", "Bsp", "Bsp_K", "Bsp_BMSY"))
+
+#    Cross-check of digitized values against Table 4b
+fig2a_check <- rd("Fig2a_RS02_digitized", "A116:D120",
+  c("Quantity", "Table4b", "Digitized", "Difference"))
+
+# 4. Figure B.9 M. capensis female length-at-age (RS03 orange curve), digitized
+growth_int  <- rd("FigB9_growth_Mcap_F", "A5:B20",  c("Age", "Length_cm"))   # ages 0-15
+growth_grid <- rd("FigB9_growth_Mcap_F", "D5:E155", c("Age", "Length_cm"))   # 0.1-yr grid
+
+# 5. Length-weight parameters, W(g) = alpha * L(cm)^beta (2019 RC spec, Table 7)
+lw_params <- rd("LengthWeight", "A5:D8", c("Species", "Sex", "alpha", "beta"))
+
+#    Weight-at-age for M. capensis females from the Figure B.9 lengths
+weight_at_age <- rd("LengthWeight", "A13:D28",
+  c("Age", "Length_cm", "Weight_g", "Weight_kg"))
+
+# Quick checks
+str(catches); str(survey); str(fig2a); str(growth_int); str(lw_params)
+
+# Example: convert any length (cm) to weight (g) for M. capensis females
+p <- subset(lw_params, Species == "M. capensis" & Sex == "Female")
+len2wt <- function(L) p$alpha * L^p$beta
+len2wt(c(30, 50, 70))
+
+```
+
 
 ## OpenMSE 2.0
 
@@ -553,7 +616,13 @@ The Ocean Foundation host the [Harvest Strategies website](https://harveststrate
 
 <div class="hanging-indent">
 
-Hordyk, A., Huynh, Q., Carruthers, T. 2025. OpenMSE: An open-source R package for Management strategy evaluation, available from: https://openmse.com
+Ross-Gillespie, A. and Butterworth, D.S. 2024. Conditioning results for the 2024 Hake Reference Set. DEFF Fisheries document: FISHERIES/2024/OCT/SWG-DEM/15rev: 38pp.
+
+Ross-Gillespie, A., Butterworth, D.S. and Maphumalo, T. 2025. Update to the hake Reference Case Operating Model with inclusion of the 2024 commercial data. DFFE Branch Fisheries document: FISHERIES/2025/OCT/SWG-DEM/17: 14pp. (Also IWS/2025/Survey/BG3.)
+
+Rademeyer, Butterworth & Ross-Gillespie (2019) "Specifications of the South African hake 2019 Reference Case assessment", FISHERIES/2019/AUG/SWG-DEM/10rev. [weight length relationship provided by Eq. 47 & Table 7, the values from Singh (2013) FISHERIES/2013/OCT/SWG-DEM/58.]
+
+
 
 <br>
 <hr>
