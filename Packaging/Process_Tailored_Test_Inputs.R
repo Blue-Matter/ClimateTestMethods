@@ -8,12 +8,12 @@ setwd("C:/GitHub/ClimateTestMethods")
 # Atlantis: southern Benguela marine ecosystem
 SB = readRDS("ATL_final_FPL.rds") # Model, Species, Level, Sim, Parameter, Yr
 # Model, Species, Level, Sim, Parameter, Yr
-dd = dim(SB); nmod = dd[1]; nspec = dd[2]; nlev = dd[3]; nsim = dd[4]; npar = dd[5]; nyr = dd[6] 
+dd = dim(SB); nmod = dd[1]; nspec = dd[2]; nlev = dd[3]; nsim = dd[4]; npar = dd[5]; nyr = dd[6]
 
 
 # ------ Convert M to relative -----------------------------------------------------------------
-# M is a relative value - here we assume the mean is the current level. 
-Mdim = match("M",dimnames(SB)[[5]]) 
+# M is a relative value - here we assume the mean is the current level.
+Mdim = match("M",dimnames(SB)[[5]])
 SB[,1,,,Mdim,] = SB[,1,,,Mdim,]/mean(SB[,1,,,Mdim,]) # conv to mean 1
 
 
@@ -49,18 +49,18 @@ legend('bottomright',legend=round(getmuwt(lenvec_trial[2:nage])-getmuwt(lenvec_a
 
 Keq = (1-Ktrial/Kadj) * 100 # % change in K to get a 5g difference in mean weight
 
-Kdim = match("K",dimnames(SB)[[5]]) 
-SB[,1,,,Kdim,] = SB[,1,,,Kdim,]/5 * Keq  # conv to mean 1
+Kdim = match("K",dimnames(SB)[[5]])
+SB[,1,,,Kdim,] = (100 -(SB[,1,,,Kdim,]/5 * Keq))/100  # conv to mean 1
 
 
 # ----- Convert to recruitment relative to today -----------------------------------------------
 
-Rdim = match("R",dimnames(SB)[[5]]) 
+Rdim = match("R",dimnames(SB)[[5]])
 SB[,1,,,Rdim,] = SB[,1,,,Rdim,]/SB[,1,,,Rdim,1] # conv to mean 1
 
 
 # ----- Now visualize --------------------------------------------------------------------------
-  
+
 plot_TT_input(SB)
 TT = SB
 save(TT, file = "C:/GitHub/ClimateTest/data/TT.rda")
