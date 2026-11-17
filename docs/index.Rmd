@@ -104,7 +104,11 @@ Placeholder
 
 # Operating Models
 
-South Africa Sardine [operating model specification report](OMs/Sardine/Sardine_OM.html)
+South African Sardine [operating model specification report](OMs/Sardine/Sardine_OM.html)
+
+Shallow water Cape Hake [operating model specification report](OMs/Hake/Hake_OM.html)
+
+South African Anchovy [operating model specification report](OMs/Anchovy/Anchovy_OM.html)
 
 ***
 

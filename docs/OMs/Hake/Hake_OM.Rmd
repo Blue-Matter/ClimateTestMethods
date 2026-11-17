@@ -573,7 +573,7 @@ for(i in FleetIndices){
 
 ## Initial OM
 
-```{r, echo=TRUE, eval=TRUE}
+```{r init, echo=TRUE, eval=TRUE}
 om@Stock = stock
 om@Fleet = fleet_list
 hist = Simulate(om)
@@ -585,9 +585,9 @@ hist = Simulate(om)
 
 Two components of the OM specification need to be adjusted to match estimated biomass, recruitment and harvest rate: unfished recruitment (scale), apical F mismatch. 
 
-To do this we initialize the OM, estimate harvest rate, biomass and recruitment and wrap this into a bivariate optimization for unfished recruitement and apical F modifiers. 
+To do this we initialize the OM, estimate harvest rate, biomass and recruitment and wrap this into a bivariate optimization for unfished recruitment and apical F modifiers. 
 
-```{r, echo=TRUE, eval=TRUE, message = FALSE, fig.width = 7.5}
+```{r calibration, echo=TRUE, eval=TRUE, message = FALSE, fig.width = 7.5}
 ctrl = SimControl(DynamicUnfished = FALSE,
                   RefLandings = FALSE,
                   RefRemovals = FALSE,
@@ -609,7 +609,7 @@ Apply_pars = function(om, pars){
 }
 
 
-doplot = function(om, Bass, Rass, Best, Rest, pars, obj){
+doplot = function(om, Bass, Rass, Best, Rest, yrs, pars, obj){
   par(mfrow =c(1,2),mai=c(0.5,0.9,0.2,0.05))
   matplot(yrs, cbind(Rass,Rest), ylab = "Recruitment (B)", ylim = c(0,max(Rass,Rest,na.rm=T)),col=c("black","red"),lty=1,lwd=1.5,type = 'l');grid()
   legend('topleft',legend=c("Assessment","OpenMSE"),text.col = c("black","red"), bty="n")
@@ -619,11 +619,24 @@ doplot = function(om, Bass, Rass, Best, Rest, pars, obj){
                             paste("Obj. F. =", round(obj,5))), text.col = "red", bty="n")
 }  
 
+
+expandlength = function(var, nl){
+  if(length(var)>nl) return(rev(rev(var)[1:nl]))
+  if(length(var)<nl){
+    varn = rep(NA,nl)
+    varn[nl - ((length(var)-1):0)] = var
+    return(varn)
+  }
+}
+
 plotstat = function(om2, B, R, ctrl, opt,yind){
   hist = Simulate(om2, control=ctrl)
-  Best = hist@Biomass[1,1,] 
+  Best = hist@Biomass[1,1,]/2 
   Rest = hist@Number[[1]][1,1,,1] 
-  doplot(om = om2, B, R, Best, Rest, pars = opt$par, obj = opt$value)
+  Bass = expandlength(B,length(Best))
+  Rass = expandlength(R,length(Best))
+ 
+  doplot(om = om2, Bass, Rass, Best, Rest, yrs = Years(om2,"H"), pars = opt$par, obj = opt$value)
   
 }
 
@@ -651,8 +664,8 @@ Byrs = fig2a$Year
 R = rec_abs$RS02
 Ryrs = rec_abs$Year
 opt = optim(c(0,0), Int_Scale, 
-            om = om, B = B, R = R, Ryrs = Ryrs, Byrs = Byrs, ctrl = ctrl, plot=T,
-            method = "L-BFGS-B", control = list(factr = 1E12),
+            om = om, B = B, R = R, Ryrs = Ryrs, Byrs = Byrs, ctrl = ctrl, plot=F,
+            method = "L-BFGS-B", control = list(factr = 1E12, maxit = 20),
             lower = c(-1, -1), upper = c(1, 1))
 
 om2 = Apply_pars(om,opt$par)
@@ -674,7 +687,7 @@ plotstat(om2, B, R, ctrl, opt)
 
 opt2 = optim(c(0,0), Int_Scale, 
              om = om2, B = B, R = R, ctrl = ctrl, mode = "optB", plot=F,
-             method = "L-BFGS-B", control = list(factr = 1E12),
+             method = "L-BFGS-B", control = list(factr = 1E12, maxit = 10),
              lower = c(-1, -1), upper = c(1, 1))
 
 
@@ -688,7 +701,7 @@ plotstat(om3, B, R, ctrl, opt2)
 
 ## Add Generic Observation Model for MP Testing
 
-```{r, echo=TRUE, eval=TRUE}
+```{r obs_model, echo=TRUE, eval=TRUE}
 
 ExampleObs <- Obs(CPUE = IndicesObs(CV = 0.3),                                # CPUE index
                   Survey = IndicesObs(CV = 0.2, Selectivity = 'SBiomass'),    # spawning biomass survey
@@ -719,7 +732,7 @@ Although this OM does not exactly match the historical pattern of exploitation, 
 ## Example Projections
 
 
-```{r, echo=TRUE, eval=TRUE, fig.width = 7.5}
+```{r results, echo=TRUE, eval=TRUE, fig.width = 7.5}
 Hist = Simulate(om3)
 MPs = c("CurrentEffort","refMSY","refMSY50","NoFishing")
 Proj = Project(Hist, MPs)

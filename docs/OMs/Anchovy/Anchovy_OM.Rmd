@@ -1,0 +1,717 @@
+---
+title: 'South African Anchovy Operating Model Specification'
+author: "Tom Carruthers (<tom@bluematterscience.com>)"
+date: "`r Sys.Date()`"
+output:
+  rmarkdown::html_document:
+    number_sections: yes
+    toc: true
+    toc_float: true
+subtitle: A plausible hypothetical state of nature for investigating the tailored Climate Test.
+vignette: >
+  %\VignetteIndexEntry{Inverts}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+<style type="text/css">
+
+pre code {
+  word-wrap: normal;
+  white-space: pre;
+}
+body{ /* Normal  */
+   font-size: 12px;
+}
+td {  /* Table  */
+   font-size: 9px;
+}
+h1 { /* Header 1 */
+ font-size: 18px;
+ color: DarkBlue;
+}
+h2 { /* Header 2 */
+ font-size: 15px;
+ color: DarkBlue;
+}
+h3 { /* Header 3 */
+ font-size: 14px;
+ color: DarkBlue;
+}
+code.r{ /* Code block */
+  font-size: 10px;
+}
+pre { /* Code block */
+  font-size: 10px;
+  overflow-x: auto;
+}
+</style>
+
+<img src="Img/anchovy.png" width = 910>
+
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<img src="Img/BM.jpg" width="140">
+<img src="Img/openMSE.JPG" width="150">
+&nbsp;&nbsp;
+<img src="Img/HS.png" width="225">
+
+```{r setup, include = FALSE}
+
+library(readxl)
+library(kableExtra)
+#library(ClimateTest)
+
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+knitr::opts_chunk$set(dpi=85, fig.width=5.5, fig.height = 4.1, message = F)
+
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+
+options(width = 650)
+X = Y = 0
+plus=function(){X=X+1;assign("X",X, envir = globalenv())}
+getF = function(rel=1){X+rel}
+Tplus = function(){Y=Y+1;assign("Y",Y, envir = globalenv())}
+getT = function(rel=1){Y+rel}
+
+par(mai=c(0.9,0.9,0.2,0.05))
+
+plotatab2 <- function(filey,sheet,head=T){
+  if(head){
+    dat = read_xlsx(filey,sheet)
+    kable(dat,"simple")
+  }else{
+    dat = read_xlsx(filey,sheet,col_names=F)
+    kable(dat,"simple",col.names=rep("",ncol(dat)))
+  }
+}
+
+
+```
+
+
+<br>
+<hr>
+
+
+# Foreword
+
+This operating model is for conducting exploratory, didactic analyses and is not intended to inform management decision making at this stage. All data used in the construction of these operating models are publicly available from sources that are cited.
+
+<br>
+<hr>
+
+
+# Introduction
+
+This operating model aims to closely mimic the recent benchmark stock assessment of South African anchovy (*Engraulis encrasicolus*) by [de Moor (2024)](refs/FISHERIES_2024_AUG_SWG_PEL_35 AnchovyAssessment.pdf) for the purposes of testing the robustness of management procedures to projected climate changes originating from an Atlantis Ecosystem Model ([Ortega-Cisneros et al. 2018](https://onlinelibrary.wiley.com/doi/10.1111/fog.12268)). The baseline assessment model (ABH) assumes time-invariant natural mortality (1.2 per year for juveniles and adults), a time-invariant von Bertalanffy growth curve and a time-invariant Beverton-Holt stock-recruitment relationship. This baseline has since been updated with data to 2024 ([de Moor 2025](https://science.uct.ac.za/maram/2025-workshop), [IWS/2025/Sardine/BG7](refs/IWS_2025_Sardine_BG7 Assessment of the South African anchovy resource using data up to 2024.pdf)).
+
+Anchovy are assumed to form a single stock distributed along the west and south coasts of South Africa. The assessment is age-structured (ages 0 to 4+), operates on a quarterly time step with pulse fishing in the middle of each quarter, and is fitted to length-structured survey and commercial data, November hydroacoustic estimates of total biomass (1984 onwards), May/June hydroacoustic estimates of recruitment and daily egg production method (DEPM) estimates of spawner biomass (1984-1993) ([de Moor et al. 2024](refs/FISHERIES_2024_AUG_SWG-PEL_34 Anchovy Data Record.pdf)). Spawning and recruitment are modelled at 1 October.
+
+The resource is currently at a low level. Recruitment has been poor for several consecutive years (including the 2025 survey that is not yet included in the assessment), and the final 2025 TAC calculated by the current management procedure (OMP-18rev) was 0t ([de Moor 2025c](refs/FISHERIES_2025_AUG_SWG-PEL_47 Final2024AnchovyTAC.pdf)). de Moor (2025b; [IWS/2025/Sardine/P2](refs/IWS_2025_Sardine_P2 Stock recruitment relationships for South African anchovy.pdf)) shows that stock-recruitment relationships fitted to the more recent years are less productive than the time-invariant relationship assumed here, and this is an obvious priority for robustness testing.
+
+The focus of this operating model is capturing the overall stock dynamics in terms of resilience, magnitude and natural variability for the purpose of evaluating under projections, various management procedures (MP) that set annual advice. As such the focus is not capturing the detailed seasonal dynamics necessary to interpret historical length-composition data correctly (a primary challenge for the assessment) but rather to use the assessment estimates for evaluating MPs. For this reason the operating model is annual and captures the stock-wide dynamics informed by the stock assessment.
+
+<br>
+<hr>
+
+# Methods
+
+## Data extraction from the assessment documents
+
+The assessment documents do not tabulate the estimated time series of biomass, recruitment or spawning biomass. However, the figures of [de Moor (2024)](refs/FISHERIES_2024_AUG_SWG_PEL_35 AnchovyAssessment.pdf) are embedded as vector graphics, so the plotted values can be recovered exactly by reading the drawing paths in the PDF and calibrating them against the axis tick marks (script: [code/extract_anchovy_figures.py](code/extract_anchovy_figures.py)). The following were extracted for the baseline (ABH) model, using data to 2023:
+
+* Model total biomass at 15 November (Figure 1). The plotted line is the 'bias corrected' model estimate, i.e. the model biomass multiplied by the November survey bias $k_N$ = 0.89 (Table 2 of de Moor 2024). The biomass used here is the plotted value divided by $k_N$.
+* Recruitment at 1 October (Figure 11). The mean over 1984-2022 of the extracted values is 609 billion, matching the 610 billion reported in the figure caption.
+* Spawner biomass at 1 October (Figure 10). These points are not labelled by year, so they were matched to years using the paired residual-by-year and residual-by-spawner-biomass plots of the same figure.
+* The fitted Beverton-Holt stock-recruitment curve (Figure 10).
+* Quarterly commercial selectivity-at-length (Figure 6).
+* The proportions-at-length of ages 0, 1 and 2 at the middle of each quarter (Figure 9).
+
+The figures of the 2025 update ([de Moor 2025](refs/IWS_2025_Sardine_BG7 Assessment of the South African anchovy resource using data up to 2024.pdf)) are raster images. The historical harvest proportion (Figure 12) and growth curve (Figure 8) were digitized from these images by pixel tracing; these are approximate. Catches, survey indices and the annual maturity parameters were copied from tables ([de Moor et al. 2024](refs/FISHERIES_2024_AUG_SWG-PEL_34 Anchovy Data Record.pdf) Tables 1-3, de Moor 2025 Table B.3). The sources of each column are recorded in the 'Sources' sheet of the data workbook.
+
+```{r data_extraction, echo=TRUE, eval=TRUE, fig.width=7.5, fig.height=5.5}
+library(readxl)
+datafile = 'Data/SA_Anchovy_2024_estimates.xlsx'
+est_yr  = as.data.frame(read_xlsx(datafile, 'ByYear'))       # biomass, SSB, recruitment, catches and survey indices by year
+est_len = as.data.frame(read_xlsx(datafile, 'ByLength'))     # quarterly selectivity and age-length distributions by length class
+mat_yr  = as.data.frame(read_xlsx(datafile, 'Maturity'))     # annual maturity ogive parameters
+qcatch  = as.data.frame(read_xlsx(datafile, 'QuarterCatch')) # quarterly catches
+est_25  = as.data.frame(read_xlsx(datafile, 'Assess2025'))   # harvest proportion from the 2025 update
+SRcurve = as.data.frame(read_xlsx(datafile, 'SRcurve'))      # points along the assessment's Beverton-Holt curve
+pars    = as.data.frame(read_xlsx(datafile, 'Parameters'))
+getpar  = function(nam) pars$Value[pars$Name == nam]
+
+par(mfrow = c(2,2), mai = c(0.45,0.7,0.25,0.05))
+yrs = est_yr$Year
+plot(yrs, est_yr$B, type = 'l', lwd = 2, ylim = c(0, max(est_yr$B)*1.05), xlab = "", ylab = "Biomass (Mt)", main = "Total biomass, 15 Nov")
+points(yrs, est_yr$SurveyB, pch = 19, cex = 0.7, col = 'grey40'); grid()
+legend('topleft', legend = c("Model (B / kN)", "Survey"), lwd = c(2,NA), pch = c(NA,19), col = c('black','grey40'), bty = 'n', cex = 0.8)
+plot(yrs, est_yr$R, type = 'l', lwd = 2, ylim = c(0, max(est_yr$R)*1.05), xlab = "", ylab = "Recruitment (billions)", main = "Recruitment, 1 Oct"); grid()
+plot(yrs, est_yr$SSB, type = 'l', lwd = 2, ylim = c(0, max(est_yr$SSB)*1.05), xlab = "", ylab = "Spawner biomass (Mt)", main = "Spawner biomass, 1 Oct"); grid()
+plot(yrs, est_yr$Catch_cal, type = 'h', lwd = 4, col = 'grey40', ylim = c(0, max(est_yr$Catch_cal)*1.05), xlab = "", ylab = "Catch (kt)", main = "Calendar-year landings"); grid()
+```
+
+
+## OpenMSE 2.0
+
+OpenMSE operating models were configured to match the aggregate age-structured dynamics of the [stock assessment](refs/FISHERIES_2024_AUG_SWG_PEL_35 AnchovyAssessment.pdf) closely matching the estimates of harvest rate, recruitment and biomass.
+
+## Model timing
+
+The assessment works in quarters and the operating model is annual. The operating model year *y* is taken to run from 1 October of year *y* (the assumed date of spawning and recruitment in the assessment) to 30 September of year *y+1*. Hence:
+
+* recruitment in operating model year *y* is the assessment recruitment at 1 October of year *y*,
+* biomass at the start of operating model year *y* is compared with the assessment total biomass at 15 November of year *y* (approximately 6 weeks later), and
+* the catch in operating model year *y* is the catch from October of year *y* to September of year *y+1*.
+
+Lengths and weights at the start of the year (used to calculate biomass and spawning biomass) are those of the fourth quarter (age + 1/8 year), and the lengths and weights of the catch are an average over the quarters in which fish are caught (see below).
+
+## OM Initialization
+
+```{r om_init, echo=TRUE, eval=TRUE}
+library(openMSE)
+packageVersion('MSEtool') # should be v4x
+
+# Create blank operating model and fill details
+om = new('om')
+om@Name = "South African Anchovy"
+om@Longitude = 19
+om@Latitude  = -34.5
+om@Author = 'Tom Carruthers'
+om@Agency = 'Blue Matter'
+om@Email = 'tom@bluematterscience.com'
+om@Region = "South Africa"
+om@Sponsor = "The Ocean Foundation"
+om@Source = "https://climatetest.bluematterscience.com"
+
+# Basic Config
+Years = est_yr$Year           # historical year labels (1984-2023)
+ny = length(Years)            # number of historical years
+om@nYear = ny                 # historical year
+om@pYear = 50                 # 50 projected years
+om@Interval = 1               # management updated every 1 year
+om@DataLag = 1                # data available from last year (not in-season management)
+om@nSim = 48                  # No. realisations of stock and fleet dynamics
+om@CurrentYear = max(Years)   # label for most recent historical year
+om@Years = Years(om)          # all year labels
+om@Seasons = 1                # Annual OM
+om@maxF = 3                   # maximum apical exploitation rate is 3.0 (harvest rate of 95%)
+om@Seed = 1                   # random seed for stochastic sampling
+om@Log[[1]] = paste("OM created:", Sys.Date())
+
+```
+
+## Stock and Fleet Initialization
+
+```{r stock_fleet_init, echo=TRUE, eval=TRUE}
+stock = new('stock')
+stock@Name = 'South African Anchovy'
+stock@CommonName = 'Anchovy'
+stock@Species = 'Engraulis encrasicolus'
+
+fleet = new('fleet')
+fleet@Name = "Pelagic purse-seine fleet (directed anchovy and anchovy bycatch)"
+```
+
+
+## Natural mortality rate
+
+The operating model assumes the same natural mortality as the baseline assessment, which is 1.2 per year for both juveniles (age 0) and adults (age 1+) ([de Moor 2024](refs/FISHERIES_2024_AUG_SWG_PEL_35 AnchovyAssessment.pdf); [de Moor 2025](refs/IWS_2025_Sardine_BG7 Assessment of the South African anchovy resource using data up to 2024.pdf) Table B.1). Unlike the sardine operating model, the recruitment estimates we are conditioning on are at the start of age 0 (1 October, immediately after spawning), hence age 0 is subject to the full juvenile natural mortality rate in the OM. The assessment uses a plus group of age 4.
+
+```{r natural_mortality, echo=TRUE, eval=TRUE}
+M = getpar('M')
+stock@Ages = Ages(4, MinAge = 0, PlusGroup = TRUE)                     # Ages 0 to 4+
+ages = stock@Ages@Classes; nage = length(ages)
+stock@NaturalMortality = NaturalMortality(MeanAtAge = rep(M, nage))
+plot(ages, stock@NaturalMortality@MeanAtAge, pch=19, lwd=2, xlab = "Age", ylim = c(0,1.5), ylab = "Inst. Nat. M. (per year)"); grid()
+```
+
+## Somatic Growth
+
+The assessment assumes that length-at-age is normally distributed about a von Bertalanffy growth curve with an age at zero length of approximately 0.2 years (i.e. peak recruitment in early December). Because anchovy grow very quickly, mean length changes substantially within a year: a 0-year-old is approximately 3.6 cm in the first quarter, 7 cm in the second quarter and 9 cm in the third quarter (Figure 9 of [de Moor 2024](refs/FISHERIES_2024_AUG_SWG_PEL_35 AnchovyAssessment.pdf)).
+
+The operating model uses the assessment's proportion-at-length distributions of each age at the middle of each quarter (Q1 Jan-Mar, ..., Q4 Oct-Dec). Ages 3 and 4+ are assumed to have the same length distribution as age 2, which is a close approximation (Figure 9 of de Moor 2024). Fish of age 0 in the fourth quarter (i.e. just after spawning) are placed in the smallest (minus) length class.
+
+The length-at-age of the stock is taken as the mean length in the fourth quarter (i.e. at the start of the operating model year).
+
+```{r somatic_growth, echo=TRUE, eval=TRUE, fig.width = 7}
+Lmid = est_len$Length                           # length class mid-points (cm)
+quarters = c("Q4","Q1","Q2","Q3")              # order within the OM year (Oct-Sep)
+tq = c(Q4 = 1/8, Q1 = 3/8, Q2 = 5/8, Q3 = 7/8)  # time of mid-quarter after 1 October (years)
+
+ALK = function(age, q){                         # proportion-at-length of an age in a quarter
+  a = min(age, 2)                               # ages 3 and 4+ use the age-2 distribution
+  p = est_len[[paste0("A", a, "_", q)]]
+  p / sum(p)
+}
+
+LAA_q = sapply(quarters, function(q) sapply(ages, function(a) sum(ALK(a, q) * Lmid)))  # mean length by age (rows) and quarter (cols)
+rownames(LAA_q) = ages
+round(LAA_q, 2)
+
+stock@Length = Length(MeanAtAge = LAA_q[, "Q4"])
+
+# von Bertalanffy fit to the 2025 assessment growth curve (digitized) for comparison
+vb = function(t) getpar('Linf') * (1 - exp(-getpar('K') * (t - getpar('t0'))))
+par(mfrow=c(1,2),mai=c(0.9,0.9,0.3,0.05))
+tt = seq(0, 5, length.out = 200)
+plot(tt, pmax(0, vb(tt)), type = 'l', lwd = 2, col = 'grey', xlab = "Age (years after 1 October)", ylab = "Length (cm)", ylim = c(0, 13))
+for(q in quarters) points(ages + tq[q], LAA_q[, q], pch = 19, col = 'blue')
+legend('bottomright', legend = c("VB (2025 Fig. 8)", "Mean length by quarter"), lwd = c(2, NA), pch = c(NA, 19), col = c("grey", "blue"), bty = 'n', cex = 0.8); grid()
+matplot(Lmid, sapply(quarters, function(q) ALK(1, q)), type = 'l', lty = 1, lwd = 1.5, col = c("blue","black","red","green"), xlab = "Length (cm)", ylab = "Proportion", main = "Age 1"); grid()
+legend('topleft', legend = quarters, text.col = c("blue","black","red","green"), bty = 'n', cex = 0.8)
+```
+
+## Weight-at-Length
+
+The mass-at-length relationship used in the assessment for November is (de Moor 2023; Table B.1 of [de Moor 2025](refs/IWS_2025_Sardine_BG7 Assessment of the South African anchovy resource using data up to 2024.pdf)):
+
+W = 0.007366 * L ^ 3.11124             (cm - g)
+
+Weight-at-age is calculated by integrating this relationship over the length distribution of each age, rather than applying it to the mean length.
+
+Note that if MP advice is unitless (e.g. catch in the projection relative to catch in 2023) the length-weight relationship is largely inconsequential. To obtain the same scale the length-weight relationship is exactly inversely related to unfished recruitment and numbers are not used in the model.
+
+```{r weight_at_length, echo=TRUE, eval=TRUE, fig.width= 7}
+wl = function(L) getpar('w_a') * L ^ getpar('w_b') / 1000      # weight (kg) at length (cm)
+WAA_q = sapply(quarters, function(q) sapply(ages, function(a) sum(ALK(a, q) * wl(Lmid))))  # kg by age and quarter
+rownames(WAA_q) = ages
+WT = WAA_q[, "Q4"]                                                # weight at the start of the OM year
+stock@Weight = Weight(MeanAtAge = WT)
+
+par(mfrow=c(1,2),mai=c(0.9,0.9,0.6,0.05))
+plot(ages, WT*1000, xlab="Age",ylab = "Weight (g)",type="b", pch=19, lwd=1.5); grid()
+plot(Lmid, wl(Lmid)*1000, type="l",lwd=1.5,xlab="Length (cm)",ylab = "Weight (g)"); grid()
+
+```
+
+## Maturity
+
+The assessment assumes a logistic maturity-at-length relationship with annually varying length at 50% maturity, $L_{50,y}$, and rate of increase in maturity, $\delta_y$ (Yemane et al. 2024, as tabulated in Table B.3 of [de Moor 2025](refs/IWS_2025_Sardine_BG7 Assessment of the South African anchovy resource using data up to 2024.pdf)). The operating model uses the average of these parameters over 1984-2024. Maturity-at-age is calculated by integrating the ogive over the length distribution of each age at the time of spawning (1 October, approximated by the fourth-quarter distribution). Age-0 fish are not mature at spawning.
+
+Note that the relatively shallow ogive means that around 20% of ages 2+ are assumed to be immature.
+
+```{r maturity, echo=TRUE, eval=TRUE, fig.width = 7}
+L50 = mean(mat_yr$L50); delta = mean(mat_yr$delta)
+ogive = function(L, L50, delta) 1 / (1 + exp(-(L - L50) / delta))
+MAA = sapply(ages, function(a) sum(ALK(a, "Q4") * ogive(Lmid, L50, delta)))
+MAA[1] = 0                                                         # age 0 not mature at spawning
+stock@Maturity = Maturity(MeanAtAge = MAA)
+
+par(mfrow=c(1,2),mai=c(0.9,0.9,0.3,0.05))
+LL = seq(0, 16, length.out = 200)
+plot(LL, ogive(LL, L50, delta), type = 'n', xlab = "Length (cm)", ylab = "Fraction Mature")
+for(i in 1:nrow(mat_yr)) lines(LL, ogive(LL, mat_yr$L50[i], mat_yr$delta[i]), col = 'grey')
+lines(LL, ogive(LL, L50, delta), lwd = 2); grid()
+legend('topleft', legend = c("Annual (1984-2024)", paste0("Mean (L50 = ", round(L50,2), ", delta = ", round(delta,2), ")")), lwd = c(1,2), col = c("grey","black"), bty = 'n', cex = 0.8)
+plot(ages, MAA, type = 'b', pch = 19, lwd = 2, ylim = c(0,1), xlab = "Age", ylab = "Fraction Mature"); grid()
+```
+
+## Recruitment
+
+The baseline assessment estimates a time-invariant Beverton-Holt stock-recruitment relationship between spawner biomass at 1 October and recruitment at 1 October ([de Moor 2024](refs/FISHERIES_2024_AUG_SWG_PEL_35 AnchovyAssessment.pdf), Figure 10). Rather than refitting this relationship to the estimates of spawner biomass and recruitment (which are not independent; see the sardine OM specification), the operating model adopts the assessment's estimated curve.
+
+The $\alpha$ (maximum recruitment) and $\beta$ (spawner biomass at half maximum recruitment) parameters of the curve are recovered from points along the extracted curve and then converted to unfished recruitment ($R_0$) and steepness ($h$) using the unfished spawning biomass per recruit ($\phi_0$) of the operating model:
+
+$R_0 = \alpha - \beta / \phi_0$, $\quad h = \frac{R(0.2 S_0)}{R_0}$, where $S_0 = R_0 \phi_0$.
+
+Recruitment deviations are calculated from the extracted spawner biomass and recruitment estimates. The assessment notes that recruitment in the final year (2023) is not well estimated, so this deviation (and those of the projection years) is generated with the same standard deviation and lag-1 autocorrelation as the 1984-2022 deviations.
+
+```{r recruitment, echo=TRUE, eval=TRUE}
+
+SSB = est_yr$SSB                      # spawner biomass at 1 October (million t)
+R = est_yr$R                          # recruitment at 1 October (billions)
+R[ny] = NA                            # final year recruitment is not well estimated by the assessment
+
+BHab = function(S, a, b) a * S / (b + S)                     # Beverton-Holt in alpha-beta form
+fit = nls(R ~ BHab(SSB, a, b), data = SRcurve, start = list(a = 1000, b = 0.5))
+alpha = coef(fit)['a']; beta = coef(fit)['b']
+
+surv = exp(-cumsum(c(0, rep(M, nage - 1))))                  # survivorship to the start of each age
+surv[nage] = surv[nage] / (1 - exp(-M))                      # plus group
+phi0 = sum(surv * MAA * WT)                                  # kg per recruit = million t per billion recruits
+
+R0 = unname(alpha - beta / phi0)                             # unfished recruitment (billions)
+S0 = R0 * phi0                                               # unfished spawner biomass (million t)
+h = unname(BHab(0.2 * S0, alpha, beta) / R0)                 # steepness
+
+RD = log(R / BHab(SSB, alpha, beta))                         # log recruitment deviations
+AC = acf(RD[!is.na(RD)], 1, plot = F)$acf[2,1,1]             # lag-1 recruitment autocorrelation
+SD = sd(RD, na.rm=T)                                         # lognormal recruitment process error ('sigma-R')
+
+round(c(alpha = unname(alpha), beta = unname(beta), phi0_g = phi0 * 1000, R0 = R0, S0 = S0, h = h, SD = SD, AC = AC), 3)
+
+par(mfrow=c(1,2),mai=c(0.9,0.9,0.3,0.05))
+plot(SSB, R, pch = 19, xlim = c(0, 5), ylim = c(0, max(R, na.rm=T)*1.05), xlab = "Spawner biomass (Mt)", ylab = "Recruitment (billions)")
+text(SSB, R, labels = substr(Years, 3, 4), pos = 3, cex = 0.6)
+SS = seq(0, 5, length.out = 200)
+lines(SS, BHab(SS, alpha, beta), col = 'red', lwd = 2)
+points(SRcurve$SSB, SRcurve$R, col = 'grey', cex = 0.5)
+legend('bottomright', legend = c(paste("h =", round(h,3)), paste("R0 =", round(R0), "billion")), text.col = "red", bty = "n"); grid()
+plot(Years, RD, type = 'b', pch = 19, xlab = "Year", ylab = "Log recruitment deviation"); abline(h = 0, lty = 2); grid()
+
+DepGuess = (est_yr$B[1] / quantile(est_yr$B, 0.5))                          # depletion guess
+RecDevInit = matrix(DepGuess, nrow = om@nSim, ncol = stock@Ages@MaxAge)     # initial rec devs go into year 1 of RecDevHist
+RecDevHist = matrix(exp(RD), nrow = om@nSim, ncol = ny, byrow = T)          # historical rec devs
+RecDevProj = matrix(NA,nrow = om@nSim, ncol = om@pYear)                     # projected rec devs
+nterminal = sum(is.na(RD))                                                  # No. terminal years in need of filling
+fyears = rev(rev(om@Years)[1:(nterminal + om@pYear)])                       # labels for years that need filling
+res = MSEtool::GenResiduals(SD, rep(AC,om@nSim), fyears, om@nSim, TruncSD = 3,
+                            LastError = RecDevHist[,ny-nterminal])          # generated residuals with AC and SD
+RecDevHist[,(ny-nterminal+1):ny] = res[,1:nterminal]                        # populate terminal rec devs
+RecDevProj = res[, (nterminal+1):ncol(res)]                                 # populate projected rec devs
+
+stock@SRR = SRR(Pars=list(h=h), R0 = R0 * 1E9, AC = AC, RecDevInit = RecDevInit,  # build Stock Rec. Rel. slot
+                RecDevHist = RecDevHist, RecDevProj = RecDevProj)
+
+matplot(Years(om, Period = "P"), t(RecDevProj[1:4,]),lty=1,type="l",
+        xlab="Proj. Year",ylab ="Rec. Dev.", main="4 Simulations"); grid()
+legend('topleft',legend=c(paste("SD =",round(SD,2)),paste("Lag-1 AC =", round(AC,2))))
+
+```
+
+The assessment's Beverton-Holt curve implies moderate resilience (steepness around 0.5). There is no trend in the recruitment residuals against spawner biomass but there is a decreasing trend in recent years (also evident in the 2025 update), which motivates the alternative stock-recruitment relationships considered by [de Moor (2025b)](refs/IWS_2025_Sardine_P2 Stock recruitment relationships for South African anchovy.pdf).
+
+
+## Selectivity
+
+The assessment estimates commercial selectivity-at-length for each quarter. These are dome-shaped since larger fish are less available to the fishery. Selectivity-at-age is derived for each quarter by integrating selectivity-at-length over the length distribution of each age in that quarter. The annual selectivity-at-age is then the average of these quarterly selectivities weighted by the average fraction of the annual catch taken in each quarter (1984-2022).
+
+The fishery is dominated by the catch of recruits (age 0) in the second and third quarters (April - September), with smaller catches of 1-year-olds in the first quarter of the year.
+
+```{r selectivity, echo=TRUE, eval=TRUE, fig.width = 7}
+
+qshare = colSums(qcatch[, c("Q4_OctDec","Q1_JanMar","Q2_AprJun","Q3_JulSep")])
+qshare = qshare / sum(qshare); names(qshare) = quarters
+round(qshare, 3)
+
+SAA_q = sapply(quarters, function(q) sapply(ages, function(a) sum(ALK(a, q) * est_len[[paste0("Sel_", q)]])))
+rownames(SAA_q) = ages
+SAA = as.vector(SAA_q %*% qshare)
+SAA = SAA / max(SAA)
+
+fleet@Selectivity = Selectivity(MeanAtAge = SAA)
+
+par(mfrow=c(1,2),mai=c(0.9,0.9,0.3,0.05))
+qcols = c(Q4 = "blue", Q1 = "black", Q2 = "red", Q3 = "green")
+matplot(Lmid, est_len[, paste0("Sel_", quarters)], type = 'l', lty = 1, lwd = 1.5, col = qcols, xlab = "Length (cm)", ylab = "Selectivity", main = "Assessment (by quarter)"); grid()
+legend('topright', legend = quarters, text.col = qcols, bty = 'n', cex = 0.8)
+plot(ages, SAA, type = 'b', pch = 19, lwd = 2, ylim = c(0,1), xlab = "Age", ylab = "Commercial Selectivity", main = "Operating model (annual)")
+lines(ages, MAA, lwd = 1.5, lty = 2, col = 'red'); grid()
+legend('topright', legend = c("Selectivity", "Fraction Mature"),text.col = c("black","red"),bty='n')
+
+```
+
+## Weight of the catch
+
+Since most of the catch is of recruits caught during their first winter, the weight of fish in the catch is substantially higher than their weight at the start of the operating model year (age-0 fish weigh close to zero at 1 October). The mean weight-at-age of the catch is calculated as the average weight in each quarter, weighted by the expected catch-at-age in numbers in that quarter (quarterly catch share x quarterly selectivity x survival to the middle of the quarter).
+
+```{r catch_weight, echo=TRUE, eval=TRUE}
+cwt = sweep(SAA_q, 2, qshare, "*") * exp(-M * outer(rep(1, nage), tq[quarters]))  # relative catch numbers by age and quarter
+WC = rowSums(cwt * WAA_q) / rowSums(cwt)                                          # mean weight of the catch (kg)
+allyrs = om@Years                                                                 # historical and projection years
+WCarray = array(rep(WC, length(allyrs)), dim = c(1, nage, length(allyrs)),
+                dimnames = list(Sim = 1, Age = ages, Year = allyrs))               # Sim x Age x Year with named dimensions
+fleet@WeightFleetRetained = WCarray
+fleet@WeightFleetSelected = WCarray
+
+plot(ages, WC*1000, type = 'b', pch = 19, lwd = 2, ylim = c(0, max(WC)*1100), xlab = "Age", ylab = "Weight (g)")
+lines(ages, WT*1000, type = 'b', pch = 1, lty = 2)
+legend('bottomright', legend = c("Catch", "Stock (1 October)"), pch = c(19, 1), lty = c(1, 2), bty = 'n'); grid()
+```
+
+## Apical F
+
+The 2025 update reports a time series of harvest proportion (catch in calendar year *y* divided by the model total biomass of year *y*). To match the timing of the operating model, the harvest proportion is recalculated here as the catch from October of year *y* to September of year *y+1* divided by the extracted model total biomass at 15 November of year *y*. The 2024 monthly catches are not available in the references, so the harvest proportion for the final operating model year (2023) is the 2024 harvest proportion of the 2025 update. These are converted to a guess of apical F that will be later adjusted to match historical biomass estimates.
+
+
+```{r apical_F, echo=TRUE, eval=TRUE}
+
+U = est_yr$Catch_OctSep / 1000 / est_yr$B                     # harvest proportion: catch (Mt) / biomass (Mt)
+U[ny] = est_25$U[est_25$Year == 2024]                          # terminal year from the 2025 update
+Adj_vuln = 0.5                                                 # apical F applies to the selected component (approx. 50% of biomass)
+F_guess = -log(1-U) / Adj_vuln                                 # initial guess of F time series
+Eff = matrix(F_guess, nrow=om@nSim, ncol=ny, byrow = T,
+             dimnames = list(1:om@nSim,Years(om,'h')))         # Effort matrix with correct year labels
+fleet@Effort = Effort(Effort = Eff)                            # Populate historical effort slot
+fleet@Catchability = Catchability(Efficiency = 1)              # Populate catchability slot, F = qE, hence F = E as specified
+
+plot(Years, U, type = 'l', lwd = 2, ylim = c(0, 0.7), xlab = "Year", ylab = "Harvest proportion")
+lines(est_25$Year, est_25$U, col = 'red', lty = 2)
+legend('topright', legend = c("OM year (Oct-Sep catch / B)", "2025 update (calendar catch / B)"), lty = c(1,2), col = c("black","red"), bty = 'n', cex = 0.8); grid()
+
+```
+
+
+## Initial OM
+
+```{r initial_om, echo=TRUE, eval=TRUE}
+om@Stock = stock
+om@Fleet = fleet
+hist = Simulate(om)
+```
+
+
+
+## Scale optimization
+
+Two components of the OM specification need to be adjusted to match estimated biomass, recruitment and harvest rate: unfished recruitment (scale), apical F mismatch.
+
+To do this we initialize the OM, estimate harvest rate, biomass and recruitment and wrap this into a bivariate optimization for unfished recruitment and apical F modifiers.
+
+```{r scale_optimization, echo=TRUE, eval=TRUE, message = FALSE, fig.width = 7.5}
+ctrl = SimControl(DynamicUnfished = FALSE,
+                     RefLandings = FALSE,
+                     RefRemovals = FALSE,
+                     ConditionObs = FALSE,
+                     EstimateBeta = FALSE,
+                     GenerateData = FALSE,
+                     MSYRefs = FALSE,
+                     RefPoints = FALSE,
+                     MGT = FALSE,
+                     BLow = FALSE)
+
+B = est_yr$B                                                # Target biomass (Mt)
+Rt = est_yr$R; Rt[ny] = NA                                  # Target recruitment (billions), final year excluded
+
+Apply_pars = function(om, pars){
+  R0mult = exp(pars[1])
+  Emult = exp(-pars[1]) * exp(pars[2])
+  om@Stock@SRR@R0 = om@Stock@SRR@R0 * R0mult
+  om@Fleet@Effort@Effort =  om@Fleet@Effort@Effort * Emult
+  om
+}
+
+
+doplot = function(om, B, R, Best, Rest, pars, obj){
+  par(mfrow =c(1,2),mai=c(0.5,0.9,0.2,0.05))
+  yrs = Years(om, 'h')
+  matplot(yrs, cbind(R,Rest), ylab = "Recruitment (billions)", col=c("black","red"),lty=1,lwd=1.5,type = 'l');grid()
+  legend('topleft',legend=c("Assessment","OpenMSE"),text.col = c("black","red"), bty="n")
+  matplot(yrs,cbind(B,Best),ylab="Biomass (Mt)", col=c("black","red"),lty=1,lwd=1.5,type = 'l');grid()
+  legend('topright',legend=c(paste("R0 multiplier =",round(exp(pars[1]),3)),
+                            paste("Effort multiplier =",round(exp(-pars[1]) * exp(pars[2]),3)),
+                            paste("Obj. F. =", round(obj,5))), text.col = "red", bty="n")
+}
+
+plotstat = function(om2, B, R, ctrl, opt){
+  hist = Simulate(om2, control=ctrl)
+  Best = hist@Biomass[1,1,] * 1E-9
+  Rest = hist@Number[[1]][1,1,,1] * 1E-9
+  doplot(om = om2, B, R, Best, Rest, pars = opt$par, obj = opt$value)
+
+}
+
+Int_Scale = function(pars, om, B, R, mode = 'opt', ctrl, plot=F){
+  om = Apply_pars(om, pars)
+  hist = Simulate(om, control = ctrl)
+  Best = hist@Biomass[1,1,] * 1E-9
+  Rest = hist@Number[[1]][1,1,,1] * 1E-9
+  if(mode == 'opt')  obj = sum(abs(log(Best)-log(B)),na.rm=T) + sum(abs(log(Rest)-log(R)),na.rm=T)
+  if(mode == 'optB')  obj = sum(abs(log(Best)-log(B)),na.rm=T)
+  if(plot) doplot(om, B, R, Best, Rest, pars, obj)
+  if(grepl("opt", mode)){
+    return(obj)
+  }else{
+    pars
+  }
+}
+
+opt = optim(c(0,0), Int_Scale,
+      om = om, B = B, R = Rt, ctrl = ctrl, plot=F,
+      method = "L-BFGS-B", control = list(factr = 1E12, maxit = 10),
+      lower = c(-2, -2), upper = c(2, 2))
+
+om2 = Apply_pars(om,opt$par)
+plotstat(om2, B, Rt, ctrl, opt)
+
+
+
+```
+
+
+## Add Generic Observation Model for MP Testing
+
+The November hydroacoustic survey of total biomass and the May/June recruit survey are the primary indices used by the current management procedure. Here a generic observation model is specified with a total biomass survey (CV approximately equal to the median survey CV), a CPUE index and catches.
+
+```{r observation_model, echo=TRUE, eval=TRUE}
+
+ExampleObs <- Obs(CPUE = IndicesObs(CV = 0.3),                                # CPUE index
+                  Survey = IndicesObs(CV = 0.2, Selectivity = 'Biomass'),     # total biomass survey (November acoustic survey)
+                  Landings = CatchObs(CV = 0.025))                            # catches
+
+Obs(om2) <- list(list(ExampleObs))                                            # assign observation error model
+
+hist <- Simulate(om2)                                                         # historical reconstruction
+PlotIndexFit(hist, 'CPUE')                                                    # plot historical CPUE
+PlotIndexFit(hist, 'Survey')                                                  # plot historical survey
+
+# Save outputs to the ClimateTest R package for lazyload
+SAA = om2
+if(dir.exists("C:/GitHub/ClimateTest/data")) save(SAA, file = "C:/GitHub/ClimateTest/data/SAA.rda")
+
+```
+
+
+
+# Results
+
+## Assessment Comparison
+
+The assessment model of de Moor (2024) includes quarterly dynamics, pulse fishing in each quarter, length-based selectivity and maturity, and the fitting of length-composition data. This complexity is required to correctly interpret input data to that model.
+
+However, the aggregate stock-wide recruitment, exploitation rate and abundance is well approximated by the annual model applied here. This approximation is suitable for the purposes of this operating model, namely to comparatively rate climate robustness of potential management procedures.
+
+```{r assessment_comparison, echo=TRUE, eval=TRUE, fig.width = 7.5}
+Hist = Simulate(om2)
+Best = Hist@Biomass[1,1,] * 1E-9
+SSBest = Hist@SBiomass[1,1,] * 1E-9
+par(mfrow =c(1,2),mai=c(0.5,0.9,0.2,0.05))
+matplot(Years, cbind(est_yr$SSB, SSBest), type = 'l', lty = 1, lwd = 1.5, col = c("black","red"), ylab = "Spawner biomass (Mt)"); grid()
+legend('topleft',legend=c("Assessment","OpenMSE"),text.col = c("black","red"), bty="n")
+plot(est_yr$SurveyB, Best, pch = 19, xlab = "November survey biomass (Mt)", ylab = "OpenMSE biomass (Mt)"); abline(0, 1, lty = 2); grid()
+```
+
+Spawning biomass is not used in the conditioning and provides a check on the maturity and weight-at-age assumptions.
+
+## Example Projections
+
+
+```{r example_projections, echo=TRUE, eval=TRUE, fig.width = 7.5}
+MPs = c("CurrentEffort","refMSY","refMSY50","NoFishing")
+Proj = Project(Hist, MPs)
+muC = apply(Proj@Landings,c(3,5),mean)
+muB = apply(Proj@Biomass,c(3,4),mean)
+mpcols = c("black","green","blue","red")
+yrs = Years(om2, 'p')
+par(mfrow =c(1,2),mai=c(0.5,0.9,0.2,0.05))
+matplot(yrs, muC/1E6,type="l",lty=1, lwd=1.5, ylab="Mean projected catch (Kt)", col = mpcols)
+matplot(yrs, muB/1E6,type="l",lty=1, ylim = c(0, max(muB)*1.05/1E6), lwd=1.5, ylab="Mean projected biomass (Kt)", col = mpcols); grid()
+legend('topright', legend=MPs, text.col=mpcols, bty="n")
+```
+
+Note that projections at the deterministic MSY fishing mortality (refMSY) deplete the stock. Given the high recruitment variability (sigma-R of approximately 0.7), the moderate steepness and the high selectivity of age-0 fish, the deterministic MSY harvest rate appears to be unsustainable in this stochastic operating model. This requires further investigation (see In Development). 
+
+# Version Notes
+
+These operating models are subject to ongoing testing and development. If you find a bug or a problem please send a report to <tom@bluematterscience.com> so that it can be fixed!
+
+<br>
+<hr>
+
+
+# In Development
+
+Outstanding tasks:
+
+```{r ToDo, eval=T,echo=F}
+
+plotatab2('Tables/Various.xlsx','ToDo')
+
+```
+
+
+# Background information
+
+Project information, links and results are available from the Climate Test [project webpage](https://blue-matter.github.io/ClimateTest/)
+
+<br>
+<hr>
+
+# Software
+
+## OpenMSE
+
+The [openMSE R package](https://openmse.com) was used to organize fishery data, define operating models, condition operating models to data, calculate reference points and specify and test existing and alternative management options.
+
+Visit the [OpenMSE website](https://openmse.com) for more information on the framework including tutorial and case studies.
+
+The Rapid Conditioning Model is also [described there](https://openmse.com/tutorial-rcm)
+
+Other useful openMSE apps include [MERA](https://www.merafish.org/) for rapidly scoping operating models and [Reference Point Calculator](https://shiny.bluematterscience.com/app/rpc) for investigating reference points and control rules.
+
+## Climate Test
+
+The Climate Test is an extension of OpenMSE that allows for comparative robustness evaluation of candidate management procedures. For more information please visit the [project splash page](https://climatetest.bluematterscience.com)
+
+## Management Strategy Evaluation
+
+The Ocean Foundation host the [Harvest Strategies website](https://harveststrategies.org/) which is an excellent resource describing MSE, MSE concepts and how MSE can be used in fishery management including introductory videos and interviews with experts. 'Harvest strategy' and Management Procedure are synonymous by the way.
+
+<br>
+<hr>
+
+
+# Climate Test Papers
+
+<div class="hanging-indent">
+
+[Carruthers, T.R.. 2024a. Developing the Climate Test: Robustness Trials for climate-ready management procedures. Col. Vol. Sci. Pap. ICCAT. 81(6): 1-26](https://www.iccat.int/Documents/CVSP/CV081_2024/n_6/CV08106104.pdf)
+
+[Carruthers, T.R., 2024b. Developing the Climate Test: Performance Metrics of Climate Robustness. Col. Vol. Sci. Pap. ICCAT. 81(2): 1-7](https://www.iccat.int/Documents/CVSP/CV081_2024/n_2/CV08102148.pdf)
+
+</div>
+
+<br>
+<hr>
+
+# References
+
+<div class="hanging-indent">
+
+de Moor, C.L. 2021. The operating model for an anchovy-only OMP-18rev. DFFE: Branch Fisheries Document FISHERIES/2021/APR/SWG-PEL/20. [pdf](refs/FISHERIES_2021_APR_SWG-PEL_20rev Anchovy only OMP Operating Model.pdf)
+
+de Moor, C.L. 2023. A revision to the South African anchovy survey length-weight relationship. DFFE: Branch Fisheries Document FISHERIES/2023/SEP/SWG-PEL/17.
+
+de Moor, C.L. 2024. Initial results towards a new 'benchmark' assessment of the South African anchovy resource. DFFE: Branch Fisheries Document FISHERIES/2024/AUG/SWG-PEL/35. [pdf](refs/FISHERIES_2024_AUG_SWG_PEL_35 AnchovyAssessment.pdf)
+
+de Moor, C.L. 2025. Assessment of the South African anchovy resource using data up to 2024. International Stock Assessment Workshop Document IWS/2025/Sardine/BG7 (also FISHERIES/2025/OCT/SWG-PEL/55). [pdf](refs/IWS_2025_Sardine_BG7 Assessment of the South African anchovy resource using data up to 2024.pdf)
+
+de Moor, C.L. 2025b. Stock recruitment relationships for South African anchovy. International Stock Assessment Workshop Document IWS/2025/Sardine/P2. [pdf](refs/IWS_2025_Sardine_P2 Stock recruitment relationships for South African anchovy.pdf)
+
+de Moor, C.L. 2025c. OMP-18rev calculated final anchovy TAC for 2025. DFFE: Branch Fisheries Document FISHERIES/2025/AUG/SWG-PEL/47. [pdf](refs/FISHERIES_2025_AUG_SWG-PEL_47 Final2024AnchovyTAC.pdf)
+
+de Moor, C.L., Merkle, D. and Coetzee, J. 2020. The data used in the 2020 anchovy assessment. DEFF: Branch Fisheries Document FISHERIES/2020/JAN/SWG-PEL/02. [pdf](refs/FISHERIES_2020_JAN_SWG-PEL_02 Data used 2020 anchovy assessment.pdf)
+
+de Moor, C.L., Merkle, D. and Coetzee, J. 2024. The data used in the 2024 anchovy assessment. DFFE: Branch Fisheries Document FISHERIES/2024/AUG/SWG-PEL/34. [pdf](refs/FISHERIES_2024_AUG_SWG-PEL_34 Anchovy Data Record.pdf)
+
+Hordyk, A., Huynh, Q., Carruthers, T. 2025. OpenMSE: An open-source R package for Management strategy evaluation, available from: https://openmse.com
+
+Ortega-Cisneros, K., Cochrane, K.L., Fulton, E.A., Gorton, R. and Popova, E. 2018. Evaluating the effects of climate change in the southern Benguela upwelling system using the Atlantis modelling framework. Fisheries Oceanography 27: 489-503. https://doi.org/10.1111/fog.12268
+
+Yemane, D., Geja, Y. and Coetzee, J. 2024. Modelling maturity of three pelagic fishes, anchovy (*Engraulis encrasicolus*), sardine (*Sardinops sagax*), and redeye (*Etrumeus whiteheadi*), off the coast of South Africa. DFFE: Branch Fisheries Document FISHERIES/2024/MAY/SWG-PEL/47.
+
+</div>
+
+<br>
+<hr>
+
+# Acknowledgements
+
+<br>
+
+<span style="font-size: 1.05em; display: block; text-align: center;">ClimateTest is funded by:
+
+<span style="font-size: 1.25em; display: block; text-align: center;">The Paul M. Angell Family Foundation</span>
+<span style="font-size: 1.25em; display: block; text-align: center;">Oceankind</span>
+<span style="font-size: 1.25em; display: block; text-align: center;">The Pew Charitable Trusts</span>
+
+<span style="font-size: 1.05em; display: block; text-align: center;">and </span>
+
+<span style="font-size: 1.25em; display: block; text-align: center;">The Ocean Foundation in partnership with [www.HarvestStrategies.org](https://harveststrategies.org/)</span>
+
+<br>
+<br>
+<hr>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
