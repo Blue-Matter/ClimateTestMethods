@@ -148,11 +148,21 @@ rd <- function(sheet, range, names) {
   df[rowSums(!is.na(df)) > 0, , drop = FALSE]   # drop any fully empty rows
 }
 
-# 1. M. capensis catches by fleet (thousand t), Table 1, 1978-2023
+
+# 1. M. capensis catches by fleet (thousand t), 1917-2023
+#    1917-1977 from the 2019 RC spec (Table App.A.1a); 1978-2023 from the 2024 RS update (Table 1).
 #    Blank in source ("-") -> NA. Total columns are the workbook formulas' values.
-catches <- rd("Catches_Mcapensis", "A5:J50",
+catches <- rd("Catches_Mcapensis", "A5:K111",
   c("Year", "Offshore_WC", "Offshore_SC", "Inshore_SC", "Longline_WC",
-    "Longline_SC", "Handline_SC", "Offshore_total", "Longline_total", "All_total"))
+    "Longline_SC", "Handline_SC", "Offshore_total", "Longline_total", "All_total",
+    "Source"))
+
+#    Convert to kg (1 thousand t = 1e6 kg) and record missing catches as zero
+catch_cols <- setdiff(names(catches), c("Year", "Source"))
+catches[catch_cols] <- lapply(catches[catch_cols], function(x) {
+  x[is.na(x)] <- 0
+  x * 1e6
+})
 
 # 2. M. capensis survey biomass and s.e. (thousand t), Table 3b, 1985-2024
 survey <- rd("Survey_Mcapensis", "A5:I44",
@@ -172,27 +182,126 @@ fig2a_check <- rd("Fig2a_RS02_digitized", "A116:D120",
 growth_int  <- rd("FigB9_growth_Mcap_F", "A5:B20",  c("Age", "Length_cm"))   # ages 0-15
 growth_grid <- rd("FigB9_growth_Mcap_F", "D5:E155", c("Age", "Length_cm"))   # 0.1-yr grid
 
-# 5. Length-weight parameters, W(g) = alpha * L(cm)^beta (2019 RC spec, Table 7)
+# 5. Length-weight parameters (2019 RC spec, Table 7). Source: W(g) = alpha * L(cm)^beta.
+#    Converted to W(kg) = alpha * L(cm)^beta: since W(kg) = W(g) / 1000, alpha is divided by 1000.
 lw_params <- rd("LengthWeight", "A5:D8", c("Species", "Sex", "alpha", "beta"))
+lw_params$alpha <- lw_params$alpha / 1000
 
 #    Weight-at-age for M. capensis females from the Figure B.9 lengths
 weight_at_age <- rd("LengthWeight", "A13:D28",
   c("Age", "Length_cm", "Weight_g", "Weight_kg"))
 
+# 6. Natural mortality-at-age, ages 0-15 (15 = plus group), 2019 RC spec section 4.1.1
+M_at_age <- rd("M_at_age", "A5:C20", c("Age", "M_capensis", "M_paradoxus"))
+
+# 7. Commercial selectivity-at-age by fleet (digitized, Fig B.7b), ages 0-15 in rows,
+#    one column per fleet / sex / period (column names taken from the sheet header)
+sel_at_age <- as.data.frame(read_excel(xlsx, sheet = "Selectivity_at_age", range = "A4:U20"))
+
+# 8a. Absolute recruitment (millions of fish) for the Ricker models, 1979-2024,
+#     digitized from Figure B.2b panel A(ii)
+rec_abs <- rd("Recruitment_Ricker", "A5:D50", c("Year", "RS01", "RS02", "RS03"))
+
+# 8b. Stock-recruitment residuals (log space) for the Ricker models, 1985-2023
+#    (2024 RS Table B.1a "Zeta"); not estimated (= 0) before 1985
+rec_devs <- rd("RecDevs_Ricker", "A5:D43", c("Year", "RS01", "RS02", "RS03"))
+
+# 9. Female maturity: logistic ogive parameters, f(l) = 1/(1+exp((l50-l)/delta)),
+#    and approximate M. capensis maturity-at-age from mean length-at-age (ages 0-15)
+mat_params <- rd("Maturity", "A5:C6", c("Species", "l50", "delta"))
+mat_at_age <- rd("Maturity", "A11:C26", c("Age", "Length_cm", "Mature"))
+
+#    ogive function for any length (cm), M. capensis females
+q <- subset(mat_params, Species == "M. capensis")
+len2mat <- function(L) 1 / (1 + exp((q$l50 - L) / q$delta))
+
 # Quick checks
 str(catches); str(survey); str(fig2a); str(growth_int); str(lw_params)
 
-# Example: convert any length (cm) to weight (g) for M. capensis females
+# Example: convert any length (cm) to weight (kg) for M. capensis females
 p <- subset(lw_params, Species == "M. capensis" & Sex == "Female")
 len2wt <- function(L) p$alpha * L^p$beta
-len2wt(c(30, 50, 70))
+len2wt(c(30, 50, 70))   # approx. 0.21, 1.0, 2.8 kg
+
+```
+
+Selectivity expansion
+
+```{r selectivity, echo=TRUE, eval = TRUE}
+
+years <- 1917:2023
+ages  <- sel_at_age$Age          # 0:15
+na    <- length(ages)
+
+# fill a year x age matrix from period curves and year breakpoints
+build <- function(curves, starts, interp = NULL) {
+  # curves: list of age vectors, one per period
+  # starts: first year of each period (first element is ignored: covers all earlier years)
+  # interp: optional c(y0, y1) - linear change from curve[[k]] at y0 to curve[[k+1]] at y1
+  m <- matrix(NA_real_, length(years), na, dimnames = list(years, ages))
+  for (i in seq_along(years)) {
+    y <- years[i]
+    k <- max(1, sum(y >= starts))
+    m[i, ] <- curves[[k]]
+    if (!is.null(interp) && y > interp[1] && y < interp[2]) {
+      w <- (y - interp[1]) / (interp[2] - interp[1])
+      k1 <- sum(interp[1] >= starts)              # period in force at y0
+      m[i, ] <- (1 - w) * curves[[k1]] + w * curves[[k1 + 1]]
+    }
+  }
+  m / apply(m, 1, max)   # rescale each year so maximum selectivity = 1
+}
+
+col <- function(nm) sel_at_age[[nm]]
+
+offshore <- function(coast) {
+  build(list(col(paste0(coast, "_offshore_1917-76")),
+             col(paste0(coast, "_offshore_1977-84")),
+             col(paste0(coast, "_offshore_1993+"))),
+        starts = c(1917, 1977, 1993),
+        interp = c(1984, 1993))
+}
+
+longline <- function(coast, sex) {
+  p <- paste0(coast, "_longline_", sex, "_")
+  build(list(col(paste0(p, "1984-99")),
+             col(paste0(p, "2000-05")),
+             col(paste0(p, "2006+"))),
+        starts = c(1917, 2000, 2006))
+}
+
+constant <- function(nm) build(list(col(nm)), starts = 1917)
+
+sel_list <- list(
+  WC_offshore   = offshore("WC"),
+  SC_offshore   = offshore("SC"),
+  SC_inshore    = constant("SC_inshore"),
+  SC_handline   = constant("SC_handline"),
+  WC_longline_M = longline("WC", "M"),
+  WC_longline_F = longline("WC", "F"),
+  SC_longline_M = longline("SC", "M"),
+  SC_longline_F = longline("SC", "F")
+)
+
+sel_array <- array(unlist(sel_list),
+                   dim = c(length(years), na, length(sel_list)),
+                   dimnames = list(year = years, age = ages, fleet = names(sel_list)))
+
+# Checks: every year/fleet has max selectivity 1; period 3 offshore curve
+# (rescaled) used from 1993; 1988 sits between periods 2 and 3
+stopifnot(all(abs(apply(sel_array, c(1, 3), max) - 1) < 1e-12))
+p3 <- col("WC_offshore_1993+")
+stopifnot(isTRUE(all.equal(unname(sel_list$WC_offshore["2000", ]), p3 / max(p3))))
+round(sel_list$WC_offshore[c("1976", "1984", "1988", "1993"), ], 2)
+dim(sel_array)   # 107 years x 16 ages x 8 fleets
+
 
 ```
 
 
 ## OpenMSE 2.0
 
-OpenMSE operating models were configured to match the aggregate age-structured dynamics of the [stock assessment](https://science.uct.ac.za/sites/default/files/media/documents/science_uct_ac_za/2066/iws-2025-sardine-bg4.pdf) closely matching the estimates of harvest rate, recruitment and biomass. 
+OpenMSE operating models were configured to match the aggregate age-structured dynamics of the Ricker Reference Set Operating model of Ross-Gillespie et al. (2025) closely matching the estimates of harvest rate, recruitment and biomass. 
 
 ## OM Initialization 
 
@@ -201,16 +310,12 @@ library(openMSE)
 library(readxl)
 packageVersion('MSEtool') # should be v4x
 
-# AI extracted estimates of recent assessed biomass, recruitment, harvest rate, selectivity, maturity and somatic growth
-est_yr =  as.data.frame(readxl::read_xlsx('Data/SA_Sardine_2025_estimates.xlsx', 'ByYear'))
-est_len = as.data.frame(readxl::read_xlsx('Data/SA_Sardine_2025_estimates.xlsx', 'ByLength'))
-est_age = as.data.frame(readxl::read_xlsx('Data/SA_Sardine_2025_estimates.xlsx', 'ByAge'))
 
 # Create blank operating model and fill details
 om = new('om') 
-om@Name = "South African Sardine"
-om@Longitude = 20
-om@Latitude  = -35
+om@Name = "Shallow Water Cape Hake"
+om@Longitude = 20.5
+om@Latitude  = -35.5
 om@Author = 'Tom Carruthers'
 om@Agency = 'Blue Matter'
 om@Email = 'tom@bluematterscience.com'
@@ -219,7 +324,7 @@ om@Sponsor = "The Ocean Foundation"
 om@Source = "https://climatetest.bluematterscience.com"
 
 # Basic Config
-Years = est_yr$Year           # historical year labels
+Years = catches$Year          # historical year labels
 ny = length(Years)            # number of historical years
 om@nYear = ny                 # historical year
 om@pYear = 50                 # 50 projected years
@@ -237,54 +342,62 @@ om@Log[[1]] = paste("OM created:", Sys.Date())
 
 ## Stock and Fleet Initialization 
 
+Here the stock and Fleet objects are named. 
+
 ```{r, echo=TRUE, eval=TRUE}
 stock = new('stock')
-stock@Name = 'South African Sardine'
-stock@CommonName = 'Sardine'
-stock@Species = 'Sardinops sagax'
+stock@Name = 'Cape Hake'
+stock@CommonName = 'Hake'
+stock@Species = 'Merluccius capensis'
 
-fleet = new('fleet')
-fleet@Name = "All commercial fleets (inc directed sardine and round herring)"
+FleetIndices = 2:7
+nF = length(FleetIndices)
+FleetNames = names(catches)[FleetIndices]
+fleet_list = list()
+ft = 0
+for(i in FleetIndices){
+  ft = ft+1
+  fleet_list[[ft]] = new('fleet')
+  fleet_list[[ft]]@Name = FleetNames[ft]
+}
+
+print(FleetNames)
+
 ```
 
 
 ## Natural mortality rate 
 
-The operating model assumes the same natural mortality as the recent stock assessment (following the 2022 assessment of [de Moor (2022)](https://doi.org/10.25375/uct.22146602.v1)) that is 1.0 per year for juveniles (age 0) and 0.8 for mature fish (age 1+). The recruitment outputs we are conditioning on are end of age-0 and subject to the initial year of mortality, hence we assume zero mortality for age class zero in the OM. 
+The operating model assumes the same age-dependent natural mortality as the recent operating models. 
 
 ```{r, echo=TRUE, eval=TRUE}
-stock@Ages = Ages(6, MinAge = 0)                                            # Age 6 is the last age class for calculations of age-based vectors
-stock@NaturalMortality = NaturalMortality(MeanAtAge = c(0, rep(0.8, 6)))   
+
+stock@Ages = Ages(nrow(M_at_age)-1, MinAge = min(M_at_age$Age), PlusGroup=TRUE)                                            # Age 6 is the last age class for calculations of age-based vectors
+stock@NaturalMortality = NaturalMortality(MeanAtAge = M_at_age$M_capensis)   
 plot(stock@Ages@Classes,stock@NaturalMortality@MeanAtAge, pch=19, lwd=2, xlab = "Age", ylim = c(0,1), ylab = "Inst. Nat. M. (per year)"); grid()
 ```
 
 ## Somatic Growth
 
-The operating model assumes an length-at-age vector that is the unweighted mean of the South and West curves used by the 2025 assessment [de Moor 2025](https://science.uct.ac.za/sites/default/files/media/documents/science_uct_ac_za/2066/iws-2025-sardine-bg4.pdf).
+The operating model assumes the female length-at-age vector used by Ross-Gillespie et al. (2025). 
 
 ```{r, echo=TRUE, eval=TRUE}
-Classes = 1:ceiling(max(est_age$Length)*1.3)   
-stock@Length = Length(MeanAtAge = c(est_age$Length,est_age$Length[6]),  # Need to add another asympotic length to make 7 age classes (first is age-0)
-                      Classes = 1:ceiling(max(est_age$Length)*1.3) )    # Length classes
-plot(0:6,stock@Length@MeanAtAge, lwd=2, type="l",xlab = "Age", ylab = "Length (cm)"); grid()
+stock@Length = Length(MeanAtAge = growth_int$Length_cm)  # Need to add another asympotic length to make 7 age classes (first is age-0)
+plot(stock@Ages@Classes,stock@Length@MeanAtAge, lwd=2, type="l",xlab = "Age", ylab = "Length (cm)"); grid()
 ```
 
 ## Weight-at-Length
 
-The weight length-weight relationship follows that derived by [OLSPS Marine](refs/FISHERIES_2023_NOV_SWG-PEL_24Rev Sardine W-L Further Regressions.pdf). The relationship for both stock units combined is assumed to follow the relationship: 
-
-W = 0.0000071118 * L ^ 3.181             (cm - kg)
-
-Note that if MP advice is unitless (e.g. catch in the projection relative to catch in 2024) the length-weight relationship is largely inconsequential. To obtain the same scale the length-weight relationship is exactly inversly related to unfished recruitment and numbers are not used in the model. 
+Note that if MP advice is unitless (e.g. catch in the projection relative to catch in 2024) the length-weight relationship is largely inconsequential. To obtain the same scale the length-weight relationship is exactly inversely related to unfished recruitment and numbers are not used in the model. 
 
 ```{r, echo=TRUE, eval=TRUE, fig.width= 7}
 LT =  stock@Length@MeanAtAge 
-WT =  0.0000071118 * LT ^ 3.181
+ab = lw_params[lw_params$Species == "M. capensis" & lw_params$Sex == "Female",]
+WT =  ab$alpha * LT ^ ab$beta 
 stock@Weight = Weight(MeanAtAge = WT)
-
 par(mfrow=c(1,2),mai=c(0.9,0.9,0.6,0.05))
-plot(0:6, WT, xlab="Age",ylab = "Weight (kg)",type="l", lwd=1.5)
-plot(LT, WT, type="l",lwd=1.5,xlab="Length (cm)",ylab = "Weight (kg)")
+plot(stock@Ages@Classes, WT, xlab="Age",ylab = "Weight (kg)",type="l", lwd=1.5); grid()
+plot(LT, WT, type="l",lwd=1.5,xlab="Length (cm)",ylab = "Weight (kg)"); grid()
 
 ```
 
@@ -293,8 +406,8 @@ plot(LT, WT, type="l",lwd=1.5,xlab="Length (cm)",ylab = "Weight (kg)")
 The maturity ogive followed that specified by a preliminary MSE operating model of [de Moor (2025)](https://science.uct.ac.za/sites/default/files/media/documents/science_uct_ac_za/2066/iws-2025-sardine-bg5.pdf). This prescribes a logistic model with a length 50% maturity of 11.8811 cm with a rate of increase in maturity at length of 1.9311
 
 ```{r, echo=TRUE, eval=TRUE}
-stock@Maturity = Maturity(MeanAtLength = 1/(1+exp(-(Classes - 11.88)/1.93)), Classes = Classes)
-plot(Classes,stock@Maturity@MeanAtLength, lwd=2, type="l",xlab = "Length (cm)", ylab = "Fraction Mature"); grid()
+stock@Maturity = Maturity(MeanAtAge = mat_at_age$Mature)
+plot( mat_at_age$Age, mat_at_age$Mature, lwd=2, type="l",xlab = "Age class", ylab = "Fraction Mature"); grid()
 ```
 
 ## Recruitment
@@ -305,43 +418,69 @@ This analysis should be derived from the estimates of spawning stock biomass (SS
 
 ```{r, echo=TRUE, eval=TRUE}
 
-B = est_yr$B_west + est_yr$B_south # Biomass Mt (could be unitless, R0 and steepness h are the targets)
-R = (est_yr$R_west + est_yr$R_south) # Billions of fish (technically, rec observations are June and need inflated by age 0 M)
+ages = stock@Ages@Classes
+nage = length(ages)
 
-BH<-function(par, B, R, mode='opt', plot = F, tplot = F, curyr = 2024, pmu = 0.6, pcv = 0.1){ # optimization function for Bev-Holt SR
-  h = 0.2 + 0.8 * (1 / (1 + exp(par[1]))); R0 = exp(par[2]);  BpR = max(B,na.rm=T) / R0       # logit between 0.2 and 1
-  Rpred<-((0.8 * R0 * h * B) / (0.2 * BpR * R0 * (1 - h) + (h - 0.2) * B))                    # predicted recruitment 
-  if(plot) {plot(B,R,pch=19); points(B, Rpred,col='red');                                     # plot fitted SR curve 
-            legend('topleft',legend=c(paste("h =",round(h,3)),paste("R0 =",round(R0,3))),text.col="red",bty="n")}
-  if(mode=='opt')return(-sum(dnorm(log(Rpred)-log(R),0,0.5,log=T), na.rm=T)-dnorm(pmu,h,pcv,log=T))  # add prior on h
-  if(mode != "opt") return(log(R / Rpred))                                                    # return log rec devs
-}
+recyrs <- match(rec_abs$Year, fig2a$Year)
+S <- fig2a$Bsp[recyrs]     # female spawning biomass ('000 t), RS02
+R <- rec_abs$RS02          # recruitment (millions), RS02
+ok <- !is.na(S) & !is.na(R)
+S <- S[ok]; R <- R[ok]; yrs <- rec_abs$Year[ok]
 
-opt = optim(par = c(0,log(max(R,na.rm=T)/2)), BH, # optimize for h and R0 from initial values of 0.6 and half the max R
-            B =  B, R = R, method = "L-BFGS-B",   # bounded optimization
-            lower = c(-4,log(10)),                # broad limits
-            upper = c(4,log(50)))                 # broad limits
+# Linearised Ricker fit: log(R/S) = log(alpha) - beta * S
+fit   <- lm(log(R / S) ~ S)
+alpha <- exp(coef(fit)[1])
+beta  <- -coef(fit)[2]
+sigR  <- summary(fit)$sigma            # SD of log-scale residuals
 
 
-RD = BH(opt$par, B, R, plot=T, mode = "devs") # recruitment deviations  
-R0 = exp(opt$par[2]) * 1E9                    # 'unfished' recruitment
-h = 0.2 + 0.8 * (1 / (1 + exp(opt$par[1])))   # steepness of the B-H S-R function
-AC = acf(RD[!is.na(RD)],1)$acf[2,1,1]         # lag-1 recruitment autocorrelation
-SD = sd(RD, na.rm=T)                          # lognormal recruitment process error ('sigma-R')          
+# Derived quantities
+Smax <- 1 / beta                       # spawning biomass giving maximum recruitment
+Rmax <- alpha / (beta * exp(1))        # maximum (median) recruitment
+devs <- residuals(fit)                 # log-space recruitment deviations from the fit
 
+ricker <- function(S) alpha * S * exp(-beta * S)
 
-DepGuess = (B[1]/quantile(B,0.5,na.rm=T))                                   # depletion guess
-RecDevInit = matrix(DepGuess, nrow = om@nSim, ncol = stock@Ages@MaxAge)     # initial rec devs go into year 1 of RecDevHist
-RecDevHist = matrix(exp(RD),nrow = om@nSim, ncol = ny, byrow = T)           # historical rec devs
+# Plot data and fitted curve
+plot(S, R, xlim = c(0, max(S) * 1.2), ylim = c(0, max(R) * 1.1), pch = 19,
+     xlab = "Female spawning biomass ('000 t)", ylab = "Recruitment (millions)");grid()
+curve(ricker(x), from = 0, to = max(S) * 1.2, add = TRUE, lwd = 2, col = "blue")
+text(S, R, labels = substr(yrs, 3, 4), pos = 3, cex = 0.6)   # year labels
+
+out_alpha_beta = c(alpha = unname(alpha), beta = unname(beta), sigmaR = sigR,
+        Smax = unname(Smax), Rmax = unname(Rmax))
+
+# Steepness R0 formulation:
+M     <- M_at_age$M_capensis
+w_kg  <- len2wt(growth_int$Length_cm)    # female weight-at-age (kg), alpha already /1000
+mat   <- mat_at_age$Mature               # female maturity-at-age (approx.)
+pfem  <- 0.5                             # assumed female fraction of recruits
+
+surv <- exp(-c(0, cumsum(M[-length(M)])))             # survivorship to start of each age
+surv[16] <- surv[16] / (1 - exp(-M[16]))              # age 15 plus group
+phi0 <- sum(pfem * surv * w_kg * mat)                 # kg per recruit = '000 t per million
+
+h_hat  <- 0.2 * (alpha * phi0)^0.8
+R0_hat <- log(alpha * phi0) / (beta * phi0)
+S0_hat <- R0_hat * phi0
+outR0_h = c(phi0 = phi0, h = unname(h_hat), R0 = unname(R0_hat), S0 = unname(S0_hat))
+
+# Set up deviations
+rdyrs = match(rec_devs$Year, fig2a$Year)
+RecDevInit = matrix(1, nrow = om@nSim, ncol = stock@Ages@MaxAge)            # initial rec devs go into year 1 of RecDevHist
+RecDevHist = matrix(1 ,nrow = om@nSim, ncol = ny, byrow = T)           # historical rec devs
+RecDevHist[,rdyrs] = rep(exp(rec_devs$RS02),each=om@nSim)
 RecDevProj = matrix(NA,nrow = om@nSim, ncol = om@pYear)                     # projected rec devs
-nterminal = sum(is.na(RD))                                                  # No. terminal years in need of filling
+nterminal = 2                                                               # No. terminal years in need of filling
 fyears = rev(rev(om@Years)[1:(nterminal + om@pYear)])                       # labels for years that need filling
+AC = acf(rec_devs$RS02[!is.na(rec_devs$RS02)],1)$acf[2,1,1]         # lag-1 recruitment autocorrelation
+SD = sd(rec_devs$RS02,na.rm=T)
 res = MSEtool::GenResiduals(SD, rep(AC,om@nSim), fyears, om@nSim, TruncSD = 3, 
                             LastError = exp(RecDevHist[,ny-nterminal]))     # generated residuals with AC and SD
 RecDevHist[,(ny-nterminal+1):ny] = res[,1:nterminal]                        # populate terminal rec devs
 RecDevProj = res[, (nterminal+1):ncol(res)]                                 # populate projected rec devs
 
-stock@SRR = SRR(Pars=list(h=h), R0 = R0, AC = AC, RecDevInit = RecDevInit,  # build Stock Rec. Rel. slot
+stock@SRR = SRR(Pars=list(hR=outR0_h[2]), Model = "Ricker", R0 = outR0_h[3], AC = AC, RecDevInit = RecDevInit,  # build Stock Rec. Rel. slot
                 RecDevHist = RecDevHist, RecDevProj = RecDevProj)
 
 matplot(Years(om, Period = "P"), t(RecDevProj[1:4,]),lty=1,type="l",
@@ -350,48 +489,84 @@ legend('topleft',legend=c(paste("SD =",round(SD,2)),paste("Lag-1 AC =", round(AC
 
 ```
 
-The estimated stock biomass and estimated recruitment cannot be considered as independent (biomass) and dependent (recruitment) variables because biomass itself is a product of recruitment, and this is particularly the case for short-lived species such as sardine. The inter-dependency of these variables generally leads to an overestimate of stock resilience because higher than average recruitment is required at low stock sizes (and vice versa) to drive changes in the biomass levels. 
-
-It is therefore remarkable how little recruitment compensation is estimated (even in this post-hoc fitting). In this case, a relatively informative prior on a steepness (a level of 0.6 which is moderate resilience) barely drags steepness estimates above a value of 0.3. Without this prior, the estimated steepness tends to its lowest possible value of 0.2 which is ecologically implausible (a stock without compensation has a very high probability of extinction). 
-
-This analysis should be revised and updated given SSB estimates from the assessment. 
-
 
 ## Selectivity 
 
-Commercial fishery selectivity follows the length-based-vector of the most recent estimated year of the stock assessment. 
+Selectivities follow the most recent estimates arising from Ross-Gillespie and Butterworth (2024). These are estimated in time blocks for each fleet. 
 
 ```{r, echo=TRUE, eval=TRUE}
 
-nl = length(Classes)                                        # No. length classes
-MeanAtLength = rep(0, nl)                                   # fill a vector with zero selectivity
-ind = match(est_len$Length, Classes)                        # get correct indexing for estimated selectivity
-MeanAtLength[ind] = est_len$Selectivity                     # map estimated selectivity
-MeanAtLength[max(ind):nl] = 1                               # fill upper range with 100% selectivity (asymptotic)
+sellookup = c(1,2,3,6,8,4) # the correct indexing for the selectivity array "Offshore_WC" "Offshore_SC" "Inshore_SC"  "Longline_WC" "Longline_SC" "Handline_SC" vs "WC_offshore"   "SC_offshore"   "SC_inshore"    "SC_handline"   "WC_longline_M" "WC_longline_F" "SC_longline_M" "SC_longline_F"
+nyear = length(Years(om,"H"))
+for(ft in 1:nF){
+  flookup = sellookup[ft]
+  sAA = aperm(array(rep(sel_array[,,flookup],each=om@nSim),c(om@nSim,nyear,nage)),c(1,3,2))
+  fleet_list[[ft]]@Selectivity = Selectivity(MeanAtAge = sAA)
+}
 
-fleet@Selectivity = Selectivity(MeanAtLength = MeanAtLength,
-                                Classes = Classes)
+# Plot the various selectivities
+ages <- sel_at_age$Age
+norm <- function(x) x / max(x)
 
-plot(Classes,MeanAtLength, lwd=2, type="l",xlab = "Length (cm)", ylab = "Commercial Selectivity", main = "Estimated by Assessment in 2024"); grid()
-lines(Classes,stock@Maturity@MeanAtLength, lwd=1.5, lty=2,col='red'); 
-legend('topleft', legend = c("Selectivity", "Fraction Mature"),text.col = c("black","red"),bty='n')
+# panel definitions: title and the sel_at_age columns (one per period)
+panels <- list(
+  "WC offshore trawl" = c("WC_offshore_1917-76", "WC_offshore_1977-84", "WC_offshore_1993+"),
+  "SC offshore trawl" = c("SC_offshore_1917-76", "SC_offshore_1977-84", "SC_offshore_1993+"),
+  "SC inshore trawl"  = "SC_inshore",
+  "SC handline"       = "SC_handline",
+  "WC longline (M)"   = c("WC_longline_M_1984-99", "WC_longline_M_2000-05", "WC_longline_M_2006+"),
+  "WC longline (F)"   = c("WC_longline_F_1984-99", "WC_longline_F_2000-05", "WC_longline_F_2006+"),
+  "SC longline (M)"   = c("SC_longline_M_1984-99", "SC_longline_M_2000-05", "SC_longline_M_2006+"),
+  "SC longline (F)"   = c("SC_longline_F_1984-99", "SC_longline_F_2000-05", "SC_longline_F_2006+")
+)
+cols <- c("#1b9e77", "#d95f02", "#7570b3")   # period 1, 2, 3
+
+op <- par(mfrow = c(2, 4), mar = c(3, 3, 2, 0.5), mgp = c(1.8, 0.5, 0), oma = c(0, 0, 2, 0))
+for (nm in names(panels)) {
+  cc <- panels[[nm]]
+  plot(NA, xlim = range(ages), ylim = c(0, 1.05), xlab = "Age", ylab = "Selectivity",
+       main = nm, cex.main = 1, las = 1)
+  for (i in seq_along(cc)) {
+    lines(ages, norm(sel_at_age[[cc[i]]]), col = cols[i], lwd = 2, type = "o", pch = 16, cex = 0.5)
+  }
+  if (length(cc) > 1) {
+    labs <- sub(".*_", "", cc)   # period label from column name
+    legend("topright", legend = labs, col = cols[seq_along(cc)], lwd = 2, bty = "n", cex = 0.8)
+  }
+}
+mtext("M. capensis commercial selectivity-at-age (2024 RS, Ricker; digitized from Fig. B.7b)",
+      outer = TRUE, cex = 0.9, font = 2)
+par(op)
+
 
 ```
 
+The selectivities are remarkably similar among time blocks. Ross-Gillespie and Butterworth (2024) parameterize these such that only the inflection point changes among blocks, the ascending and descending limb parameter of the double normal selectivities are shared among time block for each fleet. 
+
 ## Apical F
 
-The stock assessment reports provide a time-series estimate of harvest rate (U) for the combined West and South components. This is converted to an guess of apical F that will be later adjusted to match historical biomass estimates. 
+The operating model reports provide a time-series estimate both catches and spawning biomass. This is converted to an guess of apical F that will be later adjusted to match historical biomass estimates. 
 
 
 ```{r, echo=TRUE, eval=TRUE}
 
-U = est_yr$U                                              # harvest rate times series (S and W combined)
-Adj_vuln = 0.5                                            # apical F and selectivity curve is 50% of the biomass available (U)
-F_guess = -log(1-U) / Adj_vuln                            # initial guess of F time series
-Eff = matrix(F_guess, nrow=om@nSim, ncol=ny, byrow = T, 
+catchyrs = match(catches$Year,fig2a$Year)
+Adj_vuln = 2
+Adj_sp = 2
+par(mfrow=c(2,3))
+ft = 0
+for(i in FleetIndices){
+  U = catches[,i]/(catches[,i]+(fig2a$Bsp[catchyrs]*1E6)/Adj_sp)
+  ft = ft+1
+  U[is.na(U)|U<1E-5] = 1E-5
+  plot(U,pch=19);grid();mtext(FleetNames[ft])
+  F_guess = -log(1-U) / Adj_vuln                            # initial guess of F time series
+  F_guess[is.na(F_guess)] = 0
+  Eff = matrix(F_guess, nrow=om@nSim, ncol=ny, byrow = T, 
              dimnames = list(1:om@nSim,Years(om,'h')))    # Effort matrix with correct year labels
-fleet@Effort = Effort(Effort = Eff)                       # Populate historical effort slot
-fleet@Catchability = Catchability(Efficiency = 1)         # Populate catchability slot, F = qE, hence F = E as specified
+  fleet_list[[ft]]@Effort = Effort(Effort = Eff)                       # Populate historical effort slot
+  fleet_list[[ft]]@Catchability = Catchability(Efficiency = 1)
+}
 
 ```
 
@@ -400,7 +575,7 @@ fleet@Catchability = Catchability(Efficiency = 1)         # Populate catchabilit
 
 ```{r, echo=TRUE, eval=TRUE}
 om@Stock = stock
-om@Fleet = fleet
+om@Fleet = fleet_list
 hist = Simulate(om)
 ```
 
@@ -414,53 +589,56 @@ To do this we initialize the OM, estimate harvest rate, biomass and recruitment 
 
 ```{r, echo=TRUE, eval=TRUE, message = FALSE, fig.width = 7.5}
 ctrl = SimControl(DynamicUnfished = FALSE,
-                     RefLandings = FALSE,
-                     RefRemovals = FALSE,
-                     ConditionObs = FALSE,
-                     EstimateBeta = FALSE,
-                     GenerateData = FALSE,
-                     MSYRefs = FALSE,
-                     RefPoints = FALSE,
-                     MGT = FALSE,
-                     BLow = FALSE)
+                  RefLandings = FALSE,
+                  RefRemovals = FALSE,
+                  ConditionObs = FALSE,
+                  EstimateBeta = FALSE,
+                  GenerateData = FALSE,
+                  MSYRefs = FALSE,
+                  RefPoints = FALSE,
+                  MGT = FALSE,
+                  BLow = FALSE)
 
 
 Apply_pars = function(om, pars){
   R0mult = exp(pars[1])
   Emult = exp(-pars[1]) * exp(pars[2])                      # fried egg please!
   om@Stock@SRR@R0 = om@Stock@SRR@R0 * R0mult
-  om@Fleet@Effort@Effort =  om@Fleet@Effort@Effort * Emult
+  for(ff in 1:length(om@Fleet))om@Fleet[[ff]]@Effort@Effort =  om@Fleet[[ff]]@Effort@Effort * Emult
   om
 }
 
 
-doplot = function(om, B, R, Best, Rest, pars, obj){
+doplot = function(om, Bass, Rass, Best, Rest, pars, obj){
   par(mfrow =c(1,2),mai=c(0.5,0.9,0.2,0.05))
-  ind = !is.na(R); yrs = Years(om, 'h')[ind]
-  matplot(yrs, cbind(R[ind],Rest[ind]), ylab = "Recruitment (B)", col=c("black","red"),lty=1,lwd=1.5,type = 'l');grid()
+  matplot(yrs, cbind(Rass,Rest), ylab = "Recruitment (B)", ylim = c(0,max(Rass,Rest,na.rm=T)),col=c("black","red"),lty=1,lwd=1.5,type = 'l');grid()
   legend('topleft',legend=c("Assessment","OpenMSE"),text.col = c("black","red"), bty="n")
-  matplot(yrs,cbind(B[ind],Best[ind]),ylab="Biomass (Mt)", col=c("black","red"),lty=1,lwd=1.5,type = 'l');grid()
+  matplot(cbind(Bass,Best),ylab="Spawn. Biomass (Mt)", ylim = c(0,max(Bass,Best,na.rm=T)),col=c("black","red"),lty=1,lwd=1.5,type = 'l');grid()
   legend('topleft',legend=c(paste("R0 multiplier =",round(exp(pars[1]),3)),
                             paste("Effort multiplier =",round(exp(-pars[1]) * exp(pars[2]),3)),
                             paste("Obj. F. =", round(obj,5))), text.col = "red", bty="n")
 }  
 
-plotstat = function(om2, B, R, ctrl, opt){
+plotstat = function(om2, B, R, ctrl, opt,yind){
   hist = Simulate(om2, control=ctrl)
-  Best = hist@Biomass[1,1,] * 1E-9
-  Rest = hist@Number[[1]][1,1,,1] * 1E-9
+  Best = hist@Biomass[1,1,] 
+  Rest = hist@Number[[1]][1,1,,1] 
   doplot(om = om2, B, R, Best, Rest, pars = opt$par, obj = opt$value)
-
+  
 }
 
-Int_Scale = function(pars, om, B, R, mode = 'opt', ctrl, plot=F){
+Int_Scale = function(pars, om, B, R, Byrs, Ryrs, mode = 'opt', ctrl, plot=F){
   om = Apply_pars(om, pars)
   hist = Simulate(om, control = ctrl)
-  Best = hist@Biomass[1,1,] * 1E-9
-  Rest = hist@Number[[1]][1,1,,1] * 1E-9
-  if(mode == 'opt')  obj = sum(abs(log(Best)-log(B)),na.rm=T) + sum(abs(log(Rest)-log(R)),na.rm=T)
-  if(mode == 'optB')  obj = sum(abs(log(Best)-log(B)),na.rm=T)
-  if(plot) doplot(om, B, R, Best, Rest, pars, obj)
+  Best = hist@SBiomass[1,1,]/2 
+  yind = match(Ryrs,Years(om,"H"))
+  Rest = hist@Number[[1]][1,1,yind,1] 
+  yind = match(Years(om,"H"),Byrs)
+  Bass = B[yind]
+  Rass = R
+  if(mode == 'opt')  obj = sum(abs(log(Best)-log(Bass)),na.rm=T) + sum(abs(log(Rest)-log(Rass)),na.rm=T)
+  if(mode == 'optB')  obj = sum(abs(log(Best)-log(Bass)),na.rm=T)
+  if(plot) doplot(om, Bass, Rass, Best, Rest, pars, obj)
   if(grepl("opt", mode)){
     return(obj)
   }else{
@@ -468,10 +646,14 @@ Int_Scale = function(pars, om, B, R, mode = 'opt', ctrl, plot=F){
   }
 } 
 
+B = fig2a$Bsp
+Byrs = fig2a$Year
+R = rec_abs$RS02
+Ryrs = rec_abs$Year
 opt = optim(c(0,0), Int_Scale, 
-      om = om, B = B, R = R, ctrl = ctrl, plot=F,
-      method = "L-BFGS-B", control = list(factr = 1E12),
-      lower = c(-2, -2), upper = c(2, 2))
+            om = om, B = B, R = R, Ryrs = Ryrs, Byrs = Byrs, ctrl = ctrl, plot=T,
+            method = "L-BFGS-B", control = list(factr = 1E12),
+            lower = c(-1, -1), upper = c(1, 1))
 
 om2 = Apply_pars(om,opt$par)
 plotstat(om2, B, R, ctrl, opt)
@@ -491,9 +673,9 @@ for(i in 1:3){
 plotstat(om2, B, R, ctrl, opt)
 
 opt2 = optim(c(0,0), Int_Scale, 
-            om = om2, B = B, R = R, ctrl = ctrl, mode = "optB", plot=F,
-            method = "L-BFGS-B", control = list(factr = 1E12),
-            lower = c(-1, -1), upper = c(1, 1))
+             om = om2, B = B, R = R, ctrl = ctrl, mode = "optB", plot=F,
+             method = "L-BFGS-B", control = list(factr = 1E12),
+             lower = c(-1, -1), upper = c(1, 1))
 
 
 om3 = Apply_pars(om2,opt2$par)
@@ -519,8 +701,8 @@ PlotIndexFit(hist, 'CPUE')                                                    # 
 PlotIndexFit(hist, 'Survey')                                                  # plot historical survey
 
 # Save outputs to the ClimateTest R package for lazyload
-SAS = om3
-save(SAS, file = "C:/GitHub/ClimateTest/data/SAS.rda")
+SAH = om3
+save(SAH, file = "C:/GitHub/ClimateTest/data/SAH.rda")
 
 ```
 
@@ -530,9 +712,9 @@ save(SAS, file = "C:/GitHub/ClimateTest/data/SAS.rda")
 
 ## Assessment Comparison
 
-The assessment model of de Moor (2025) includes spatial stock components, movement among areas and varying somatic growth and recruitment among areas. This complexity is required to correctly interpret input data to that model. 
+The operating model of Ross-Gillespie and Butterworth (2024) includes sex structure which this model does not, focusing only on female growth and selectivity. 
 
-However, the aggregate stock-wide recruitment, exploitation rate and abundance is well approximated by the annual, spatially aggregated model applied here. This approximation is suitable for the purposes of this operating model, namely to comparatively rate climate robustness of potential management procedures. 
+However, the simulated recruitment, exploitation rate and abundance is well approximated by the model specified here. This approximation is suitable for the purposes of this operating model, namely to comparatively rate climate robustness of potential management procedures. 
 
 ## Example Projections
 
