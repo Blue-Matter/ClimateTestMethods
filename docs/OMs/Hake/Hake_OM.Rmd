@@ -106,7 +106,7 @@ This operating model is for conducting are exploratory, didactic analyses and is
 
 # Introduction
 
-This operating model (OM) aims to closely mimic a recent reference set of OMs for shallow-water Cape hake, *Merluccius capensis*, by [Ross-Gillespie et al. (2025)](https://zivahub.uct.ac.za/articles/standard/Update_to_the_hake_Reference_Case_Operating_Model_with_inclusion_of_the_2024_commercial_data/30680402/1), for the purposes of testing the robustness of management procedures to projected climate changes originating from an Atlantis Ecosystem Model ([Ortega-Cisneros et al. 2018][https://onlinelibrary.wiley.com/doi/10.1111/fog.12268]). 
+This operating model (OM) aims to capture 'hake-like' dynamics of a recent reference set of OMs for shallow-water Cape hake, *Merluccius capensis*, by [Ross-Gillespie et al. (2025)](https://zivahub.uct.ac.za/articles/standard/Update_to_the_hake_Reference_Case_Operating_Model_with_inclusion_of_the_2024_commercial_data/30680402/1), for the purposes of testing the robustness of management procedures to projected climate changes originating from an Atlantis Ecosystem Model ([Ortega-Cisneros et al. 2018][https://onlinelibrary.wiley.com/doi/10.1111/fog.12268]). 
 
 *M. capensis* is caught off the south and west coasts of South Africa together with the deep-water Cape hake, *M. paradoxus*. The two species are hard to distinguish. Catches are split between them using a species-splitting algorithm (Ross-Gillespie and Butterworth, 2024). Most of the *M. capensis* catch comes from the offshore trawl fleet on both coasts. The remaining catch is taken by the inshore trawl fleet on the south coast, by longline on both coasts and by a south-coast handline fishery. The handline fishery was significant in the early 2000s (up to 7.3 thousand tons in 2001) but has been much reduced since around 2010. Total *M. capensis* catches peaked at about 53 thousand tons in 1985 and have since fluctuated between about 20 and 39 thousand tons, averaging about 28 thousand tons over 2014–2023 (22.5 thousand tons in 2023). 
 
@@ -714,7 +714,7 @@ save(SAH, file = "C:/GitHub/ClimateTest/data/SAH.rda")
 
 The operating model of Ross-Gillespie and Butterworth (2024) includes sex structure which this model does not, focusing only on female growth and selectivity. 
 
-However, the simulated recruitment, exploitation rate and abundance is well approximated by the model specified here. This approximation is suitable for the purposes of this operating model, namely to comparatively rate climate robustness of potential management procedures. 
+Although this OM does not exactly match the historical pattern of exploitation, the model is certainly 'hake-like' with comparable growth, resilience, recruitment variability and fishery selectivity as the operating model on which it is based. This OM is considered suitable for the purposes of this operating model, namely to comparatively rate climate robustness of potential management procedures. 
 
 ## Example Projections
 
